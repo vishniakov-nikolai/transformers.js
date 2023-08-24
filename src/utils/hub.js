@@ -391,7 +391,9 @@ export async function getModelFile(path_or_repo_id, filename, fatal = true, opti
     const revision = options.revision ?? 'main';
 
     let requestURL = pathJoin(path_or_repo_id, filename);
-    let localPath = pathJoin(env.localModelPath, requestURL);
+    let localPath = requestURL[0] === '/'
+        ? requestURL
+        : pathJoin(env.localModelPath, requestURL);
 
     let remoteURL = pathJoin(
         env.remoteHost,
