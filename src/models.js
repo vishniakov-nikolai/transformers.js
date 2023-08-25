@@ -151,7 +151,11 @@ async function getWrappedOVModelByPath(xmlPath, binPath = null) {
 
             if (inputKeys.find(i => i.includes('key_values'))) {
                 keyValueInputNames.forEach(name => {
-                    tensorsDict[name] = convertToOVTensor(inputData[name]);
+                    const { type, dims, data } = inputData[name];
+
+                    tensorsDict[name] = data.length
+                        ? convertToOVTensor(inputData[name])
+                        : new ov.Tensor(precisionToOV(type), dims);
                 });
             }
             else {
@@ -168,6 +172,7 @@ async function getWrappedOVModelByPath(xmlPath, binPath = null) {
                     if (shape[1] === -1) shape[1] = 0;
                     if (shape[2] === -1) shape[2] = 0;
 
+                    // FIXME: replace hardcoded precision (expose input layer precision from bindings)
                     tensorsDict[name] = new ov.Tensor(ov.element.f32, shape);
                 });
             }
@@ -246,7 +251,7 @@ async function constructSession(pretrained_model_name_or_path, fileName, options
 
     // FIXME: rewrite this detection
     if (options.isOVModel) {
-        console.log('isOVModel flag passed, openvinojs-node using');
+        console.log('isOVModel flag passed, openvinojs-node is using');
         return await getWrappedOVModelByPath(
             pretrained_model_name_or_path + '/' + options.model_file_name);
     }
@@ -3026,9 +3031,11 @@ export class LlamaPreTrainedModel extends PreTrainedModel {
         // config doesn't contain pad_token_id, so we assume it is the eos_token_id
         this.config.pad_token_id = this.config.eos_token_id
 
-        this.num_heads = this.config.num_attention_heads
+        this.num_heads = this.config.num_key_value_heads
+            || this.config.num_attention_heads;
         this.num_layers = this.config.num_hidden_layers
-        this.dim_kv = this.config.hidden_size / this.num_heads;
+        this.dim_kv = this.config.num_key_value_heads
+            || (this.config.hidden_size / this.config.num_attention_heads);
     }
 }
 /**
