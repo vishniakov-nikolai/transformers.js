@@ -3034,8 +3034,7 @@ export class LlamaPreTrainedModel extends PreTrainedModel {
         this.num_heads = this.config.num_key_value_heads
             || this.config.num_attention_heads;
         this.num_layers = this.config.num_hidden_layers
-        this.dim_kv = this.config.num_key_value_heads
-            || (this.config.hidden_size / this.config.num_attention_heads);
+        this.dim_kv = this.config.hidden_size / this.config.num_attention_heads;
     }
 }
 /**
