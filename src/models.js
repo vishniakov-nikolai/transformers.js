@@ -803,14 +803,16 @@ export class PreTrainedModel extends Callable {
         const modelType = MODEL_TYPE_MAPPING.get(modelName);
 
         let info;
-        if (modelType === MODEL_TYPES.DecoderOnly) {
-            info = await Promise.all([
-                AutoConfig.from_pretrained(pretrained_model_name_or_path, options),
-                constructSession(pretrained_model_name_or_path, options.model_file_name ?? 'decoder_model_merged', options),
-                getModelJSON(pretrained_model_name_or_path, 'generation_config.json', false, options),
-            ]);
+        // FIXME: Uncomment this condition when generation_config.json file usage will be clear
+        // if (modelType === MODEL_TYPES.DecoderOnly) {
+        //     info = await Promise.all([
+        //         AutoConfig.from_pretrained(pretrained_model_name_or_path, options),
+        //         constructSession(pretrained_model_name_or_path, options.model_file_name ?? 'decoder_model_merged', options),
+        //         getModelJSON(pretrained_model_name_or_path, 'generation_config.json', false, options),
+        //     ]);
 
-        } else if (modelType === MODEL_TYPES.Seq2Seq || modelType === MODEL_TYPES.Vision2Seq) {
+        // } else
+        if (modelType === MODEL_TYPES.Seq2Seq || modelType === MODEL_TYPES.Vision2Seq) {
             info = await Promise.all([
                 AutoConfig.from_pretrained(pretrained_model_name_or_path, options),
                 constructSession(pretrained_model_name_or_path, 'encoder_model', options),
