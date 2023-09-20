@@ -121,7 +121,7 @@ async function getWrappedOVModelByPath(xmlPath, binPath = null) {
     await isFileExist(xmlPath);
     await isFileExist(binPath);
 
-    const model = core.readModel(xmlPath, binPath);
+    const model = await core.readModel(xmlPath, binPath);
 
     const inputNames = model.inputs.map(i => i.toString());
     const keyValueInputNames = inputNames.filter(i => i.includes('key_values'));
