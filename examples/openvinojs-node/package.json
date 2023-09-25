@@ -9,6 +9,6 @@
     "node": ">=18.16.0"
   },
   "dependencies": {
-    "@xenova/transformers": "file:../"
+    "@xenova/transformers": "file:../../"
   }
 }
