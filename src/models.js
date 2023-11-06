@@ -129,7 +129,7 @@ async function getWrappedOVModelByPath(modelDir, filename, options) {
     const compiledModel = await core.compileModel(model, 'CPU');
 
     return {
-        run: (inputData) => {
+        run: async (inputData) => {
             const inputKeys = Object.keys(inputData);
 
             const ir = compiledModel.createInferRequest();
@@ -166,7 +166,7 @@ async function getWrappedOVModelByPath(modelDir, filename, options) {
                 });
             }
 
-            const result = ir.infer(tensorsDict);
+            const result = await ir.infer(tensorsDict);
             const modifiedOutput = {};
 
             Object.keys(result).forEach(name => {

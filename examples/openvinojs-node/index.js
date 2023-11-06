@@ -1,7 +1,7 @@
 main();
 
 async function main() {
-  const { pipeline } = await import('@xenova/transformers');
+  const { pipeline } = await import('../../src/transformers.js');
   const modelPath = 'chgk13/decicoder-1b-openvino-int8';
 
   const generation = await pipeline(
