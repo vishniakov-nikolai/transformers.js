@@ -1,21 +1,13 @@
-const path = require('path');
-
-const MODELS_DIR = '../../../';
-
 main();
 
 async function main() {
   const { pipeline } = await import('@xenova/transformers');
-  // decicoder-1b-openvino-int8 also possible
-  const modelPath = path.resolve(MODELS_DIR, 'decicoder-1b-openvino-int8');
+  const modelPath = 'chgk13/decicoder-1b-openvino-int8';
 
   const generation = await pipeline(
     'text-generation',
     modelPath,
-    {
-      isOVModel: true,
-      'model_file_name': 'openvino_model.xml',
-    },
+    { 'model_file_name': ['openvino_model.xml', 'openvino_model.bin'] },
   );
 
   console.time('Output time:');
