@@ -2019,8 +2019,6 @@ export async function pipeline(
         local_files_only = false,
         revision = 'main',
         model_file_name,
-        // FIXME: remove
-        isOVModel = false,
     } = {}
 ) {
     // Helper method to construct pipeline
@@ -2048,8 +2046,6 @@ export async function pipeline(
         local_files_only,
         revision,
         model_file_name,
-        // FIXME: remove
-        isOVModel,
     }
 
     const classes = new Map([

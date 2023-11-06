@@ -223,7 +223,7 @@ async function constructSession(pretrained_model_name_or_path, fileName, options
     // TODO add option for user to force specify their desired execution provider
     // FIXME: rewrite this detection
     if (Array.isArray(fileName) || /\.xml$/.test(fileName)) {
-        console.log('isOVModel flag passed, openvinojs-node is using');
+        console.log('OVModel model passed, openvinojs-node is using');
 
         return await getWrappedOVModelByPath(pretrained_model_name_or_path,
             fileName, options);
@@ -769,8 +769,6 @@ export class PreTrainedModel extends Callable {
         local_files_only = false,
         revision = 'main',
         model_file_name = null,
-        // FIXME: remove
-        isOVModel = false,
     } = {}) {
 
         let options = {
@@ -781,8 +779,6 @@ export class PreTrainedModel extends Callable {
             local_files_only,
             revision,
             model_file_name,
-            // FIXME: remove
-            isOVModel,
         }
 
         const modelName = MODEL_CLASS_TO_NAME_MAPPING.get(this);
@@ -3535,8 +3531,6 @@ export class PretrainedMixin {
         local_files_only = false,
         revision = 'main',
         model_file_name = null,
-        // FIXME: remove
-        isOVModel = false,
     } = {}) {
 
         let options = {
@@ -3547,8 +3541,6 @@ export class PretrainedMixin {
             local_files_only,
             revision,
             model_file_name,
-            // FIXME: remove
-            isOVModel,
         }
         config = await AutoConfig.from_pretrained(pretrained_model_name_or_path, options);
         if (!options.config) {
