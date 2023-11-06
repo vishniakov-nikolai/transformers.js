@@ -80,9 +80,8 @@ import {
 } from './utils/tensor.js';
 
 import { executionProviders, ONNX } from './backends/onnx.js';
-import { medianFilter, round } from './transformers.js';
+import { medianFilter } from './transformers.js';
 import * as OpenVINONode from 'openvinojs-node';
-import fs from 'node:fs/promises';
 
 const { InferenceSession, Tensor: ONNXTensor } = ONNX;
 const { addon: ov } = OpenVINONode;
@@ -113,19 +112,21 @@ const MODEL_NAME_TO_CLASS_MAPPING = new Map();
 const MODEL_CLASS_TO_NAME_MAPPING = new Map();
 
 
-async function getWrappedOVModelByPath(xmlPath, binPath = null) {
-    if (!binPath) binPath = xmlPath.replace('.xml', '.bin');
+async function getWrappedOVModelByPath(modelDir, filename, options) {
+    const filenames = Array.isArray(filename) ? filename : [filename];
+    const modelFiles = [];
+
+    for (const filename of filenames) {
+        const file = await getModelFile(modelDir, filename, true, options);
+
+        modelFiles.push(file);
+    }
 
     const core = new ov.Core();
-
-    await isFileExist(xmlPath);
-    await isFileExist(binPath);
-
-    const model = await core.readModel(xmlPath, binPath);
-
+    const model = await core.readModel(...modelFiles);
     const inputNames = model.inputs.map(i => i.toString());
     const keyValueInputNames = inputNames.filter(i => i.includes('key_values'));
-    const compiledModel = core.compileModel(model, 'CPU');
+    const compiledModel = await core.compileModel(model, 'CPU');
 
     return {
         run: (inputData) => {
@@ -181,21 +182,6 @@ async function getWrappedOVModelByPath(xmlPath, binPath = null) {
         inputNames,
     };
 
-    async function isFileExist(path) {
-        let fileStat = null;
-
-        try {
-            fileStat = await fs.stat(path);
-        } catch(e) {
-            throw new Error(`${path} doesn't exist! Check path.`);
-        }
-
-        // FIXME: ovjs couldn't read model from buffer. getModelFile returns buffer, code below useful in remote usecase
-        // if (fileStat) return;
-        // const buffer = await getModelFile(pretrained_model_name_or_path, filename, true, options);
-        // await fs.writeFile(`./${filename}`, buffer);
-    }
-
     function convertToOVTensor(inputTensor) {
         const { dims, type, data } = inputTensor;
 
@@ -235,15 +221,15 @@ async function getWrappedOVModelByPath(xmlPath, binPath = null) {
  */
 async function constructSession(pretrained_model_name_or_path, fileName, options) {
     // TODO add option for user to force specify their desired execution provider
-    let modelFileName = `onnx/${fileName}${options.quantized ? '_quantized' : ''}.onnx`;
-
     // FIXME: rewrite this detection
-    if (options.isOVModel) {
+    if (Array.isArray(fileName) || /\.xml$/.test(fileName)) {
         console.log('isOVModel flag passed, openvinojs-node is using');
-        return await getWrappedOVModelByPath(
-            pretrained_model_name_or_path + '/' + options.model_file_name);
+
+        return await getWrappedOVModelByPath(pretrained_model_name_or_path,
+            fileName, options);
     }
 
+    let modelFileName = `onnx/${fileName}${options.quantized ? '_quantized' : ''}.onnx`;
     let buffer = await getModelFile(pretrained_model_name_or_path, modelFileName, true, options);
 
     try {
