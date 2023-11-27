@@ -166,12 +166,12 @@ async function getWrappedOVModelByPath(modelDir, filename, options) {
                 });
             }
 
-            const result = await ir.infer(tensorsDict);
+            const result = await ir.inferAsync(tensorsDict);
             const modifiedOutput = {};
 
             Object.keys(result).forEach(name => {
                 const ovTensor = result[name];
-                const type = parseOVPrecision(ovTensor.getPrecision());
+                const type = parseOVPrecision(ovTensor.getElementType());
                 const shape = ovTensor.getShape();
 
                 modifiedOutput[name] = new Tensor(type, ovTensor.data, shape);
