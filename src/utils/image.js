@@ -8,7 +8,6 @@
  * @module utils/image
  */
 
-import { isString } from './core.js';
 import { getFile } from './hub.js';
 import { env } from '../env.js';
 
@@ -79,7 +78,7 @@ export class RawImage {
 
     /**
      * Create a new `RawImage` object.
-     * @param {Uint8ClampedArray} data The pixel data.
+     * @param {Uint8ClampedArray|Uint8Array} data The pixel data.
      * @param {number} width The width of the image.
      * @param {number} height The height of the image.
      * @param {1|2|3|4} channels The number of channels.
@@ -91,6 +90,10 @@ export class RawImage {
         this.channels = channels;
     }
 
+    /** 
+     * Returns the size of the image (width, height).
+     * @returns {[number, number]} The size of the image (width, height).
+     */
     get size() {
         return [this.width, this.height];
     }
@@ -114,7 +117,7 @@ export class RawImage {
     static async read(input) {
         if (input instanceof RawImage) {
             return input;
-        } else if (isString(input) || input instanceof URL) {
+        } else if (typeof input === 'string' || input instanceof URL) {
             return await this.fromURL(input);
         } else {
             throw new Error(`Unsupported input type: ${typeof input}`);
@@ -166,6 +169,10 @@ export class RawImage {
      * @param {import('./tensor.js').Tensor} tensor 
      */
     static fromTensor(tensor, channel_format = 'CHW') {
+        if (tensor.dims.length !== 3) {
+            throw new Error(`Tensor should have 3 dimensions, but has ${tensor.dims.length} dimensions.`);
+        }
+
         if (channel_format === 'CHW') {
             tensor = tensor.transpose(1, 2, 0);
         } else if (channel_format === 'HWC') {
@@ -173,7 +180,18 @@ export class RawImage {
         } else {
             throw new Error(`Unsupported channel format: ${channel_format}`);
         }
-        return new RawImage(tensor.data, tensor.dims[1], tensor.dims[0], tensor.dims[2]);
+        if (!(tensor.data instanceof Uint8ClampedArray || tensor.data instanceof Uint8Array)) {
+            throw new Error(`Unsupported tensor type: ${tensor.type}`);
+        }
+        switch (tensor.dims[2]) {
+            case 1:
+            case 2:
+            case 3:
+            case 4:
+                return new RawImage(tensor.data, tensor.dims[1], tensor.dims[0], tensor.dims[2]);
+            default:
+                throw new Error(`Unsupported number of channels: ${tensor.dims[2]}`);
+        }
     }
 
     /**

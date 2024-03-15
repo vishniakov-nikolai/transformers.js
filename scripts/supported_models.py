@@ -109,6 +109,11 @@ SUPPORTED_MODELS = {
             'unitary/toxic-bert',
             'BAAI/bge-reranker-large',
             'BAAI/bge-reranker-base',
+            'cross-encoder/ms-marco-TinyBERT-L-2-v2',
+            'cross-encoder/ms-marco-MiniLM-L-2-v2',
+            'cross-encoder/ms-marco-MiniLM-L-4-v2',
+            'cross-encoder/ms-marco-MiniLM-L-6-v2',
+            'cross-encoder/ms-marco-MiniLM-L-12-v2',
         ],
 
         # Token classification
@@ -184,6 +189,16 @@ SUPPORTED_MODELS = {
             # 'Xenova/tiny-random-ClapModel',
         }
     },
+    'chinese_clip': {
+        # Zero-shot image classification
+        # TODO: Add `--split_modalities` option
+        'zero-shot-image-classification': [
+            'OFA-Sys/chinese-clip-vit-base-patch16',
+            'OFA-Sys/chinese-clip-vit-large-patch14',
+            'OFA-Sys/chinese-clip-vit-large-patch14-336px',
+            # 'OFA-Sys/chinese-clip-vit-huge-patch14', # TODO add
+        ],
+    },
     'clip': {
         # Zero-shot image classification (and feature extraction)
         # (with and without `--split_modalities`)
@@ -194,12 +209,28 @@ SUPPORTED_MODELS = {
             'openai/clip-vit-large-patch14-336',
         ],
     },
+    'clipseg': {
+        # Image segmentation
+        'image-segmentation': [
+            'CIDAS/clipseg-rd64-refined',
+            'CIDAS/clipseg-rd64',
+            'CIDAS/clipseg-rd16',
+        ],
+    },
     'codegen': {
         # Text generation
         'text-generation': [
             'Salesforce/codegen-350M-mono',
             'Salesforce/codegen-350M-multi',
             'Salesforce/codegen-350M-nl',
+        ],
+    },
+    'convbert': {
+        # Feature extraction
+        'feature-extraction': [
+            'YituTech/conv-bert-small',
+            'YituTech/conv-bert-medium-small',
+            'YituTech/conv-bert-base',
         ],
     },
     'convnext': {
@@ -289,6 +320,23 @@ SUPPORTED_MODELS = {
             'facebook/detr-resnet-50-panoptic',
         ],
     },
+    'dinov2': {
+        # Feature extraction
+        'feature-extraction': [
+            'facebook/dinov2-small',
+            'facebook/dinov2-base',
+            'facebook/dinov2-large',
+            # 'facebook/dinov2-giant',  # TODO add
+        ],
+
+        # Image classification
+        'image-classification': [
+            'facebook/dinov2-small-imagenet1k-1-layer',
+            'facebook/dinov2-base-imagenet1k-1-layer',
+            'facebook/dinov2-large-imagenet1k-1-layer',
+            # 'facebook/dinov2-giant-imagenet1k-1-layer',  # TODO add
+        ],
+    },
     'distilbert': {
         # Feature extraction
         'feature-extraction': [
@@ -327,6 +375,20 @@ SUPPORTED_MODELS = {
             'distilbert-base-cased',
         ],
     },
+    'dit': {  # NOTE: DiT has the same architecture as BEiT.
+        # Feature extraction
+        # NOTE: requires --task feature-extraction
+        'feature-extraction': [
+            'microsoft/dit-base',
+            'microsoft/dit-large',
+        ],
+
+        # Image classification
+        'image-classification': [
+            'microsoft/dit-base-finetuned-rvlcdip',
+            'microsoft/dit-large-finetuned-rvlcdip',
+        ],
+    },
     'donut': {  # NOTE: also a `vision-encoder-decoder`
         # Image-to-text
         'image-to-text': [
@@ -344,6 +406,47 @@ SUPPORTED_MODELS = {
         'depth-estimation': [
             'Intel/dpt-hybrid-midas',
             'Intel/dpt-large',
+        ],
+    },
+    'depth_anything': {
+        # Depth estimation
+        # NOTE: requires --task depth-estimation
+        'depth-estimation': [
+            'LiheYoung/depth-anything-small-hf',
+            'LiheYoung/depth-anything-base-hf',
+            'LiheYoung/depth-anything-large-hf',
+        ],
+    },
+    'electra': {
+        # Feature extraction
+        'feature-extraction': [
+            # NOTE: requires --task feature-extraction
+            'google/electra-small-discriminator',
+            'google/electra-base-discriminator',
+        ],
+    },
+    'esm': {
+        # Masked language modelling
+        'fill-mask': [
+            # with and without --task feature-extraction
+            'InstaDeepAI/nucleotide-transformer-500m-human-ref',
+            'InstaDeepAI/nucleotide-transformer-500m-1000g',
+
+            # NOTE: requires --opset 12
+            'facebook/esm2_t6_8M_UR50D',
+            'facebook/esm2_t12_35M_UR50D',
+            'facebook/esm2_t30_150M_UR50D',
+            'facebook/esm2_t33_650M_UR50D',
+        ],
+
+        # Token classification
+        'token-classification': [
+            'AmelieSchreiber/esm2_t6_8M_UR50D_rna_binding_site_predictor',
+        ],
+
+        # Zero-shot classification
+        'zero-shot-classification': [
+            'AmelieSchreiber/esm2_t6_8M_UR50D_sequence_classifier_v1',
         ],
     },
     'falcon': {
@@ -419,6 +522,22 @@ SUPPORTED_MODELS = {
         'feature-extraction': [
             'allegro/herbert-base-cased',
             'allegro/herbert-large-cased',
+        ],
+    },
+    'hubert': {
+        # Feature extraction
+        'feature-extraction': [
+            'facebook/hubert-base-ls960',
+        ],
+
+        # Audio classification
+        'audio-classification': [
+            'superb/hubert-base-superb-ks',
+        ],
+
+        # Automatic speech recognition
+        'automatic-speech-recognition': [
+            'facebook/hubert-large-ls960-ft',
         ],
     },
     'llama': {
@@ -547,6 +666,19 @@ SUPPORTED_MODELS = {
             'PygmalionAI/pygmalion-350m',
         ],
     },
+    'owlv2': {
+        # Object detection (Zero-shot object detection)
+        # NOTE: Exported with --batch_size 1
+        'zero-shot-object-detection': [
+            'google/owlv2-base-patch16',
+            'google/owlv2-base-patch16-finetuned',
+            'google/owlv2-base-patch16-ensemble',
+            # TODO: add
+            # 'google/owlv2-large-patch14',
+            # 'google/owlv2-large-patch14-finetuned',
+            # 'google/owlv2-large-patch14-ensemble',
+        ],
+    },
     'owlvit': {
         # Object detection (Zero-shot object detection)
         # NOTE: Exported with --batch_size 1
@@ -565,6 +697,60 @@ SUPPORTED_MODELS = {
             'microsoft/resnet-50',
             'microsoft/resnet-101',
             'microsoft/resnet-152',
+        ],
+    },
+    'roformer': {
+        # Feature extraction
+        'feature-extraction': [
+            'hf-tiny-model-private/tiny-random-RoFormerModel',
+        ],
+
+        # Text classification
+        'text-classification': [
+            'hf-tiny-model-private/tiny-random-RoFormerForSequenceClassification',
+        ],
+
+        # Token classification
+        'token-classification': [
+            'hf-tiny-model-private/tiny-random-RoFormerForTokenClassification',
+        ],
+
+        # TODO
+        # # Text generation
+        # 'text-generation': [
+        #     'hf-tiny-model-private/tiny-random-RoFormerForCausalLM',
+        # ],
+
+        # Masked language modelling
+        'fill-mask': [
+            'alchemab/antiberta2',
+            'hf-tiny-model-private/tiny-random-RoFormerForMaskedLM',
+        ],
+
+        # Question answering
+        'question-answering': [
+            'hf-tiny-model-private/tiny-random-RoFormerForQuestionAnswering',
+        ],
+
+        # Multiple choice
+        'multiple-choice': [
+            'hf-tiny-model-private/tiny-random-RoFormerForMultipleChoice',
+        ],
+    },
+    'phi': {
+        # Text generation
+        'text-generation': [
+            'hf-internal-testing/tiny-random-PhiForCausalLM',
+            'susnato/phi-1_5_dev',
+        ],
+    },
+    'qwen2': {
+        # Text generation
+        'text-generation': [
+            'Qwen/Qwen1.5-0.5B',
+            'Qwen/Qwen1.5-0.5B-Chat',
+            'Qwen/Qwen1.5-1.8B',
+            'Qwen/Qwen1.5-1.8B-Chat',
         ],
     },
     'roberta': {
@@ -590,16 +776,74 @@ SUPPORTED_MODELS = {
             'distilroberta-base',
         ],
     },
-    # 'sam': [
-    #     'facebook/sam-vit-base',
-    #     'facebook/sam-vit-large',
-    #     'facebook/sam-vit-huge',
-    # ],
+    'sam': {
+        # Mask generation
+        'mask-generation': [
+            # SAM
+            'facebook/sam-vit-base',
+            'facebook/sam-vit-large',
+            'facebook/sam-vit-huge',
+            'wanglab/medsam-vit-base',
 
+            # SlimSAM
+            'nielsr/slimsam-50-uniform',
+            'nielsr/slimsam-77-uniform',
+        ],
+    },
+    'segformer': {
+        # Image segmentation
+        'image-segmentation': [
+            'mattmdjaga/segformer_b0_clothes',
+            'mattmdjaga/segformer_b2_clothes',
+            'jonathandinu/face-parsing',
+
+            'nvidia/segformer-b0-finetuned-cityscapes-768-768',
+            'nvidia/segformer-b0-finetuned-cityscapes-512-1024',
+            'nvidia/segformer-b0-finetuned-cityscapes-640-1280',
+            'nvidia/segformer-b0-finetuned-cityscapes-1024-1024',
+            'nvidia/segformer-b1-finetuned-cityscapes-1024-1024',
+            'nvidia/segformer-b2-finetuned-cityscapes-1024-1024',
+            'nvidia/segformer-b3-finetuned-cityscapes-1024-1024',
+            'nvidia/segformer-b4-finetuned-cityscapes-1024-1024',
+            'nvidia/segformer-b5-finetuned-cityscapes-1024-1024',
+            'nvidia/segformer-b0-finetuned-ade-512-512',
+            'nvidia/segformer-b1-finetuned-ade-512-512',
+            'nvidia/segformer-b2-finetuned-ade-512-512',
+            'nvidia/segformer-b3-finetuned-ade-512-512',
+            'nvidia/segformer-b4-finetuned-ade-512-512',
+            'nvidia/segformer-b5-finetuned-ade-640-640',
+        ],
+
+        # Image classification
+        'image-classification': [
+            'nvidia/mit-b0',
+            'nvidia/mit-b1',
+            'nvidia/mit-b2',
+            'nvidia/mit-b3',
+            'nvidia/mit-b4',
+            'nvidia/mit-b5',
+        ],
+    },
+    'siglip': {
+        # Zero-shot image classification and feature extraction
+        # (with and without `--split_modalities`)
+        # NOTE: requires --opset 13
+        'zero-shot-image-classification': [
+            'nielsr/siglip-base-patch16-224',
+        ],
+    },
     'speecht5': {
         # Text-to-audio/Text-to-speech
         'text-to-audio': [
             'microsoft/speecht5_tts',
+        ],
+    },
+    'stablelm': {
+        # Text generation
+        'text-generation': [
+            'hf-internal-testing/tiny-random-StableLmForCausalLM',
+            'stabilityai/stablelm-2-1_6b',
+            'stabilityai/stablelm-2-zephyr-1_6b',
         ],
     },
     'squeezebert': {
@@ -607,6 +851,12 @@ SUPPORTED_MODELS = {
         'feature-extraction': [
             'squeezebert/squeezebert-uncased',
             'squeezebert/squeezebert-mnli',
+        ],
+    },
+    'starcoder2': {
+        # Text generation
+        'text-generation': [
+            'hf-internal-testing/tiny-random-Starcoder2ForCausalLM',
         ],
     },
     'swin': {
@@ -658,6 +908,8 @@ SUPPORTED_MODELS = {
             'MBZUAI/LaMini-T5-61M',
             'MBZUAI/LaMini-T5-223M',
             'MBZUAI/LaMini-T5-738M',
+            'declare-lab/flan-alpaca-base',
+            'declare-lab/flan-alpaca-large',
         ],
 
         # Feature extraction
@@ -667,6 +919,16 @@ SUPPORTED_MODELS = {
             'hkunlp/instructor-large',
         ],
     },
+    'table-transformer': {
+        # Object detection
+        'object-detection': [
+            'microsoft/table-transformer-detection',
+            'microsoft/table-transformer-structure-recognition',
+            'microsoft/table-transformer-structure-recognition-v1.1-all',
+            'microsoft/table-transformer-structure-recognition-v1.1-fin',
+            'microsoft/table-transformer-structure-recognition-v1.1-pub',
+        ],
+    },
     'trocr': {  # NOTE: also a `vision-encoder-decoder`
         # Text-to-image
         'text-to-image': [
@@ -674,6 +936,45 @@ SUPPORTED_MODELS = {
             'microsoft/trocr-base-printed',
             'microsoft/trocr-small-handwritten',
             'microsoft/trocr-base-handwritten',
+        ],
+    },
+    'unispeech': {
+        # Feature extraction
+        'feature-extraction': [
+            # Requires --task feature-extraction
+            'microsoft/unispeech-large-1500h-cv',
+        ],
+        # TODO: add support for
+        # # Automatic speech recognition
+        # 'automatic-speech-recognition': [
+        #     'microsoft/unispeech-1350-en-353-fr-ft-1h',
+        #     'microsoft/unispeech-1350-en-17h-ky-ft-1h',
+        #     'microsoft/unispeech-1350-en-90-it-ft-1h',
+        #     'microsoft/unispeech-1350-en-168-es-ft-1h',
+        # ],
+    },
+    'unispeech-sat': {
+        # Feature extraction
+        'feature-extraction': [
+            # Requires --task feature-extraction
+            'microsoft/unispeech-sat-base',
+        ],
+
+        # Audio XVector (e.g., for speaker verification)
+        'audio-xvector': [
+            'microsoft/unispeech-sat-base-plus-sv',
+            'microsoft/unispeech-sat-base-sv',
+            'microsoft/unispeech-sat-large-sv',
+        ],
+
+        # Audio frame classification
+        'audio-frame-classification': [
+            'microsoft/unispeech-sat-base-plus-sd',
+        ],
+
+        # Automatic speech recognition
+        'automatic-speech-recognition': [
+            'microsoft/unispeech-sat-base-100h-libri-ft',
         ],
     },
     'vision-encoder-decoder': {
@@ -696,6 +997,36 @@ SUPPORTED_MODELS = {
             'google/vit-base-patch16-224',
         ],
     },
+    'vitmatte': {
+        # Image matting
+        'image-matting': [
+            'hustvl/vitmatte-small-distinctions-646',
+            'hustvl/vitmatte-base-distinctions-646',
+            'hustvl/vitmatte-small-composition-1k',
+            'hustvl/vitmatte-base-composition-1k',
+        ],
+    },
+    'vits': {
+        # Text-to-audio/Text-to-speech/Text-to-waveform
+        'text-to-waveform': {
+            # NOTE: requires --task text-to-waveform --skip_validation
+            'echarlaix/tiny-random-vits',
+            'facebook/mms-tts-eng',
+            'facebook/mms-tts-rus',
+            'facebook/mms-tts-hin',
+            'facebook/mms-tts-yor',
+            'facebook/mms-tts-spa',
+            'facebook/mms-tts-fra',
+            'facebook/mms-tts-ara',
+            'facebook/mms-tts-ron',
+            'facebook/mms-tts-vie',
+            'facebook/mms-tts-deu',
+            'facebook/mms-tts-kor',
+            'facebook/mms-tts-por',
+            # TODO add more checkpoints from
+            # https://huggingface.co/models?other=vits&sort=trending&search=facebook-tts
+        }
+    },
     'wav2vec2': {
         # Feature extraction # NOTE: requires --task feature-extraction
         'feature-extraction': [
@@ -715,6 +1046,11 @@ SUPPORTED_MODELS = {
             'facebook/mms-lid-4017',
         ],
 
+        # Audio frame classification
+        'audio-frame-classification': [
+            'anton-l/wav2vec2-base-superb-sd',
+        ],
+
         # Automatic speech recognition
         'automatic-speech-recognition': [
             'jonatasgrosman/wav2vec2-large-xlsr-53-english',
@@ -724,12 +1060,34 @@ SUPPORTED_MODELS = {
             'facebook/mms-1b-fl102',
         ],
     },
+    'wav2vec2-bert': {
+        'feature-extraction': [
+            'facebook/w2v-bert-2.0',
+        ],
+
+        # Automatic speech recognition
+        'automatic-speech-recognition': [
+            'hf-audio/wav2vec2-bert-CV16-en',
+        ],
+    },
     'wavlm': {
         # Feature extraction
         'feature-extraction': [
             'microsoft/wavlm-base',
             'microsoft/wavlm-base-plus',
             'microsoft/wavlm-large',
+        ],
+
+        # Audio frame classification
+        'audio-frame-classification': [
+            'anton-l/wav2vec2-base-superb-sd',
+            'microsoft/wavlm-base-plus-sd',
+        ],
+
+        # Audio XVector (e.g., for speaker verification)
+        'audio-xvector': [
+            'microsoft/wavlm-base-plus-sv',
+            'microsoft/wavlm-base-sv',
         ],
     },
     'whisper': {

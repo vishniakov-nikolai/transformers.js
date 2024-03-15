@@ -1,7 +1,7 @@
 
 import { Tensor } from '../src/transformers.js';
 import { compare } from './test_utils.js';
-import { cat, mean, stack } from '../src/utils/tensor.js';
+import { cat, mean, stack, layer_norm } from '../src/utils/tensor.js';
 
 describe('Tensor operations', () => {
 
@@ -103,11 +103,10 @@ describe('Tensor operations', () => {
         });
     });
 
-
     describe('mean', () => {
         it('should calculate mean', async () => {
             const t1 = new Tensor('float32', [1, 2, 3, 4, 5, 6], [2, 3, 1]);
-            
+
             const target = new Tensor('float32', [3.5], []);
 
             const target0 = new Tensor('float32', [2.5, 3.5, 4.5], [3, 1]);
@@ -122,10 +121,24 @@ describe('Tensor operations', () => {
 
             let avg1 = mean(t1, 1);
             compare(avg1, target1, 1e-3);
-            
+
             let avg2 = mean(t1, 2);
             compare(avg2, target2, 1e-3);
 
         })
+    });
+
+    describe('layer_norm', () => {
+        it('should calculate layer norm', async () => {
+            const t1 = new Tensor('float32', [1, 2, 3, 4, 5, 6], [2, 3]);
+
+            const target = new Tensor('float32', [
+                -1.2247356176376343, 0.0, 1.2247356176376343,
+                -1.2247357368469238, -1.1920928955078125e-07, 1.2247354984283447,
+            ], [2, 3]);
+
+            const norm = layer_norm(t1, [t1.dims.at(-1)]);
+            compare(norm, target, 1e-3);
+        });
     });
 });
