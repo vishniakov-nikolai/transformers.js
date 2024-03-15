@@ -1171,7 +1171,7 @@ export class PreTrainedModel extends Callable {
         // @ts-ignore
         let beams = this.getStartBeams(inputs, generation_config, numOutputTokens, inputs_attention_mask);
 
-        while (beams.some(x => !x.done) && numOutputTokens < maxOutputTokens) {
+        while (beams.some(x => !x.done) && numOutputTokens < maxOutputTokens && !generation_config.abortSignal?.aborted) {
             let newest_beams = [];
             for (let beam of beams) {
                 if (beam.done) {
