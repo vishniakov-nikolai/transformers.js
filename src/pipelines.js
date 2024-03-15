@@ -25,12 +25,19 @@ import {
     AutoModelForQuestionAnswering,
     AutoModelForMaskedLM,
     AutoModelForSeq2SeqLM,
+    AutoModelForSpeechSeq2Seq,
+    AutoModelForTextToSpectrogram,
     AutoModelForCTC,
     AutoModelForCausalLM,
     AutoModelForVision2Seq,
     AutoModelForImageClassification,
     AutoModelForImageSegmentation,
     AutoModelForObjectDetection,
+    AutoModelForZeroShotObjectDetection,
+    AutoModelForDocumentQuestionAnswering,
+    AutoModelForImageToImage,
+    AutoModelForDepthEstimation,
+    // AutoModelForTextToWaveform,
     PreTrainedModel,
 } from './models.js';
 import {
@@ -45,6 +52,7 @@ import {
     dispatchCallback,
     pop,
     product,
+    get_bounding_box,
 } from './utils/core.js';
 import {
     softmax,
@@ -56,7 +64,9 @@ import {
     read_audio
 } from './utils/audio.js';
 import {
+    Tensor,
     mean_pooling,
+    interpolate,
 } from './utils/tensor.js';
 import { RawImage } from './utils/image.js';
 
@@ -474,11 +484,11 @@ export class FillMaskPipeline extends Pipeline {
  * let output = await generator('how can I become more healthy?', {
  *   max_new_tokens: 100,
  * });
- * // [ 'To become more healthy, you can: 1. Eat a balanced diet with plenty of fruits, vegetables, whole grains, lean proteins, and healthy fats. 2. Stay hydrated by drinking plenty of water. 3. Get enough sleep and manage stress levels. 4. Avoid smoking and excessive alcohol consumption. 5. Regularly exercise and maintain a healthy weight. 6. Practice good hygiene and sanitation. 7. Seek medical attention if you experience any health issues.' ]
+ * // [{ generated_text: "To become more healthy, you can: 1. Eat a balanced diet with plenty of fruits, vegetables, whole grains, lean proteins, and healthy fats. 2. Stay hydrated by drinking plenty of water. 3. Get enough sleep and manage stress levels. 4. Avoid smoking and excessive alcohol consumption. 5. Regularly exercise and maintain a healthy weight. 6. Practice good hygiene and sanitation. 7. Seek medical attention if you experience any health issues." }]
  * ```
  */
 export class Text2TextGenerationPipeline extends Pipeline {
-    _key = null;
+    _key = 'generated_text';
 
     /**
      * Fill the masked token in the text(s) given as inputs.
@@ -626,16 +636,16 @@ export class TranslationPipeline extends Text2TextGenerationPipeline {
  * **Example:** Text generation with `Xenova/distilgpt2` (default settings).
  * ```javascript
  * let text = 'I enjoy walking with my cute dog,';
- * let classifier = await pipeline('text-generation', 'Xenova/distilgpt2');
- * let output = await classifier(text);
+ * let generator = await pipeline('text-generation', 'Xenova/distilgpt2');
+ * let output = await generator(text);
  * // [{ generated_text: "I enjoy walking with my cute dog, and I love to play with the other dogs." }]
  * ```
  * 
  * **Example:** Text generation with `Xenova/distilgpt2` (custom settings).
  * ```javascript
  * let text = 'Once upon a time, there was';
- * let classifier = await pipeline('text-generation', 'Xenova/distilgpt2');
- * let output = await classifier(text, {
+ * let generator = await pipeline('text-generation', 'Xenova/distilgpt2');
+ * let output = await generator(text, {
  *   temperature: 2,
  *   max_new_tokens: 10,
  *   repetition_penalty: 1.5,
@@ -653,8 +663,8 @@ export class TranslationPipeline extends Text2TextGenerationPipeline {
  * **Example:** Run code generation with `Xenova/codegen-350M-mono`.
  * ```javascript
  * let text = 'def fib(n):';
- * let classifier = await pipeline('text-generation', 'Xenova/codegen-350M-mono');
- * let output = await classifier(text, {
+ * let generator = await pipeline('text-generation', 'Xenova/codegen-350M-mono');
+ * let output = await generator(text, {
  *   max_new_tokens: 44,
  * });
  * // [{
@@ -681,8 +691,12 @@ export class TextGenerationPipeline extends Pipeline {
             texts = [texts];
         }
 
+        // By default, do not add special tokens
+        const add_special_tokens = generate_kwargs.add_special_tokens ?? false;
+
         this.tokenizer.padding_side = 'left';
         let inputs = this.tokenizer(texts, {
+            add_special_tokens,
             padding: true,
             truncation: true,
         });
@@ -940,7 +954,7 @@ export class FeatureExtractionPipeline extends Pipeline {
  * Audio classification pipeline using any `AutoModelForAudioClassification`.
  * This pipeline predicts the class of a raw waveform or an audio file.
  * 
- * **Example:** Perform audio classification.
+ * **Example:** Perform audio classification with `Xenova/wav2vec2-large-xlsr-53-gender-recognition-librispeech`.
  * ```javascript
  * let url = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav';
  * let classifier = await pipeline('audio-classification', 'Xenova/wav2vec2-large-xlsr-53-gender-recognition-librispeech');
@@ -948,6 +962,19 @@ export class FeatureExtractionPipeline extends Pipeline {
  * // [
  * //   { label: 'male', score: 0.9981542229652405 },
  * //   { label: 'female', score: 0.001845747814513743 }
+ * // ]
+ * ```
+ * 
+ * **Example:** Perform audio classification with `Xenova/ast-finetuned-audioset-10-10-0.4593` and return top 4 results.
+ * ```javascript
+ * let url = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/cat_meow.wav';
+ * let classifier = await pipeline('audio-classification', 'Xenova/ast-finetuned-audioset-10-10-0.4593');
+ * let output = await classifier(url, { topk: 4 });
+ * // [
+ * //   { label: 'Meow', score: 0.5617874264717102 },
+ * //   { label: 'Cat', score: 0.22365376353263855 },
+ * //   { label: 'Domestic animals, pets', score: 0.1141069084405899 },
+ * //   { label: 'Animal', score: 0.08985692262649536 },
  * // ]
  * ```
  */
@@ -1025,6 +1052,105 @@ export class AudioClassificationPipeline extends Pipeline {
     }
 }
 
+/**
+ * Zero shot audio classification pipeline using `ClapModel`. This pipeline predicts the class of an audio when you
+ * provide an audio and a set of `candidate_labels`.
+ * 
+ * **Example**: Perform zero-shot audio classification with `Xenova/clap-htsat-unfused`.
+ * ```javascript
+ * let classifier = await pipeline('zero-shot-audio-classification', 'Xenova/clap-htsat-unfused');
+ * let audio = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/dog_barking.wav';
+ * let candidate_labels = ['dog', 'vaccum cleaner'];
+ * let scores = await classifier(audio, candidate_labels);
+ * // [
+ * //   { score: 0.9993992447853088, label: 'dog' },
+ * //   { score: 0.0006007603369653225, label: 'vaccum cleaner' }
+ * // ]
+ * ```
+ */
+export class ZeroShotAudioClassificationPipeline extends Pipeline {
+
+    /**
+     * Create a new ZeroShotAudioClassificationPipeline.
+     * @param {Object} options An object containing the following properties:
+     * @param {string} [options.task] The task of the pipeline. Useful for specifying subtasks.
+     * @param {PreTrainedModel} [options.model] The model to use.
+     * @param {PreTrainedTokenizer} [options.tokenizer] The tokenizer to use.
+     * @param {Processor} [options.processor] The processor to use.
+     */
+    constructor(options) {
+        super(options);
+    }
+
+    /**
+     * Preprocesses the input audio for the ZeroShotAudioClassificationPipeline.
+     * @param {any} audio The audio to be preprocessed.
+     * @param {number} sampling_rate The sampling rate of the audio.
+     * @returns {Promise<Float32Array>} A promise that resolves to the preprocessed audio data.
+     * @private
+     */
+    async _preprocess(audio, sampling_rate) {
+        if (isString(audio)) {
+            audio = await read_audio(audio, sampling_rate);
+        }
+
+        return audio;
+    }
+
+    /**
+     * Assign labels to the audio(s) passed as inputs.
+     * @param {Array} audios The input audios.
+     * @param {string[]} candidate_labels The candidate labels for this audio
+     * @param {Object} options The options for the classification.
+     * @param {string} [options.hypothesis_template] The sentence used in cunjunction with *candidate_labels* to attempt
+     * the audio classification by replacing the placeholder with the candidate_labels.
+     * Then likelihood is estimated by using logits_per_audio.
+     * @returns {Promise<any>}
+     */
+    async _call(audios, candidate_labels, {
+        hypothesis_template = "This is a sound of {}."
+    } = {}) {
+        const single = !Array.isArray(audios);
+        if (single) {
+            // @ts-ignore
+            audios = [audios];
+        }
+
+        // Insert label into hypothesis template 
+        const texts = candidate_labels.map(
+            x => hypothesis_template.replace('{}', x)
+        );
+
+        // Run tokenization
+        const text_inputs = this.tokenizer(texts, {
+            padding: true,
+            truncation: true,
+        });
+
+        const sampling_rate = this.processor.feature_extractor.config.sampling_rate;
+
+        const toReturn = [];
+        for (let audio of audios) {
+            audio = await this._preprocess(audio, sampling_rate)
+
+            const audio_inputs = await this.processor(audio);
+
+            // Run model with both text and audio inputs
+            const output = await this.model({ ...text_inputs, ...audio_inputs });
+
+            // Compute softmax per audio
+            const probs = softmax(output.logits_per_audio.data);
+
+            toReturn.push([...probs].map((x, i) => {
+                return {
+                    score: x,
+                    label: candidate_labels[i]
+                }
+            }));
+        }
+        return !single ? toReturn : toReturn[0];
+    }
+}
 
 /**
  * Pipeline that aims at extracting spoken text contained within some audio.
@@ -1054,9 +1180,7 @@ export class AudioClassificationPipeline extends Pipeline {
  * **Example:** Transcribe English w/ word-level timestamps.
  * ```javascript
  * let url = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav';
- * let transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en', {
- *     revision: 'output_attentions',
- * });
+ * let transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
  * let output = await transcriber(url, { return_timestamps: 'word' });
  * // {
  * //   "text": " And so my fellow Americans ask not what your country can do for you ask what you can do for your country.",
@@ -1126,8 +1250,7 @@ export class AutomaticSpeechRecognitionPipeline extends Pipeline {
     }
 
     /**
-     * @typedef {import('./utils/tensor.js').Tensor} Tensor
-     * @typedef {{stride: number[], input_features: Tensor, is_last: boolean, tokens?: number[], token_timestamps?: number[]}} Chunk
+     * @typedef {{stride: number[], input_features: import('./utils/tensor.js').Tensor, is_last: boolean, tokens?: number[], token_timestamps?: number[]}} Chunk
      * 
      * @callback ChunkCallback
      * @param {Chunk} chunk The chunk to process.
@@ -1327,6 +1450,14 @@ export class AutomaticSpeechRecognitionPipeline extends Pipeline {
  * let captioner = await pipeline('image-to-text', 'Xenova/vit-gpt2-image-captioning');
  * let output = await captioner(url);
  * // [{ generated_text: 'a cat laying on a couch with another cat' }]
+ * ```
+ * 
+ * **Example:** Optical Character Recognition (OCR) w/ `Xenova/trocr-small-handwritten`.
+ * ```javascript
+ * let url = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/handwriting.jpg';
+ * let captioner = await pipeline('image-to-text', 'Xenova/trocr-small-handwritten');
+ * let output = await captioner(url);
+ * // [{ generated_text: 'Mr. Brown commented icily.' }]
  * ```
  */
 export class ImageToTextPipeline extends Pipeline {
@@ -1736,28 +1867,406 @@ export class ObjectDetectionPipeline extends Pipeline {
                 return {
                     score: batch.scores[i],
                     label: id2label[batch.classes[i]],
-                    box: this._get_bounding_box(box, !percentage),
+                    box: get_bounding_box(box, !percentage),
                 }
             })
         })
 
         return isBatched ? result : result[0];
     }
+}
+
+/**
+ * Zero-shot object detection pipeline. This pipeline predicts bounding boxes of
+ * objects when you provide an image and a set of `candidate_labels`.
+ * 
+ * **Example:** Zero-shot object detection w/ `Xenova/clip-vit-base-patch32`.
+ * ```javascript
+ * let url = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/astronaut.png';
+ * let candidate_labels = ['human face', 'rocket', 'helmet', 'american flag'];
+ * let detector = await pipeline('zero-shot-object-detection', 'Xenova/owlvit-base-patch32');
+ * let output = await detector(url, candidate_labels);
+ * // [
+ * //   {
+ * //     score: 0.24392342567443848,
+ * //     label: 'human face',
+ * //     box: { xmin: 180, ymin: 67, xmax: 274, ymax: 175 }
+ * //   },
+ * //   {
+ * //     score: 0.15129457414150238,
+ * //     label: 'american flag',
+ * //     box: { xmin: 0, ymin: 4, xmax: 106, ymax: 513 }
+ * //   },
+ * //   {
+ * //     score: 0.13649864494800568,
+ * //     label: 'helmet',
+ * //     box: { xmin: 277, ymin: 337, xmax: 511, ymax: 511 }
+ * //   },
+ * //   {
+ * //     score: 0.10262022167444229,
+ * //     label: 'rocket',
+ * //     box: { xmin: 352, ymin: -1, xmax: 463, ymax: 287 }
+ * //   }
+ * // ]
+ * ```
+ * 
+ * **Example:** Zero-shot object detection w/ `Xenova/clip-vit-base-patch32` (returning top 4 matches and setting a threshold).
+ * ```javascript
+ * let url = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/beach.png';
+ * let candidate_labels = ['hat', 'book', 'sunglasses', 'camera'];
+ * let detector = await pipeline('zero-shot-object-detection', 'Xenova/owlvit-base-patch32');
+ * let output = await detector(url, candidate_labels, { topk: 4, threshold: 0.05 });
+ * // [
+ * //   {
+ * //     score: 0.1606510728597641,
+ * //     label: 'sunglasses',
+ * //     box: { xmin: 347, ymin: 229, xmax: 429, ymax: 264 }
+ * //   },
+ * //   {
+ * //     score: 0.08935828506946564,
+ * //     label: 'hat',
+ * //     box: { xmin: 38, ymin: 174, xmax: 258, ymax: 364 }
+ * //   },
+ * //   {
+ * //     score: 0.08530698716640472,
+ * //     label: 'camera',
+ * //     box: { xmin: 187, ymin: 350, xmax: 260, ymax: 411 }
+ * //   },
+ * //   {
+ * //     score: 0.08349756896495819,
+ * //     label: 'book',
+ * //     box: { xmin: 261, ymin: 280, xmax: 494, ymax: 425 }
+ * //   }
+ * // ]
+ * ```
+ */
+export class ZeroShotObjectDetectionPipeline extends Pipeline {
 
     /**
-     * Helper function to convert list [xmin, xmax, ymin, ymax] into object { "xmin": xmin, ... }
-     * @param {number[]} box The bounding box as a list.
-     * @param {boolean} asInteger Whether to cast to integers.
-     * @returns {Object} The bounding box as an object.
-     * @private
+     * Create a new ZeroShotObjectDetectionPipeline.
+     * @param {Object} options An object containing the following properties:
+     * @param {string} [options.task] The task of the pipeline. Useful for specifying subtasks.
+     * @param {PreTrainedModel} [options.model] The model to use.
+     * @param {PreTrainedTokenizer} [options.tokenizer] The tokenizer to use.
+     * @param {Processor} [options.processor] The processor to use.
      */
-    _get_bounding_box(box, asInteger) {
-        if (asInteger) {
-            box = box.map(x => x | 0);
-        }
-        const [xmin, ymin, xmax, ymax] = box;
+    constructor(options) {
+        super(options);
+    }
 
-        return { xmin, ymin, xmax, ymax };
+    /**
+     * Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
+     * @param {Array} images The input images.
+     * @param {string[]} candidate_labels What the model should recognize in the image.
+     * @param {Object} options The options for the classification.
+     * @param {number} [options.threshold] The probability necessary to make a prediction.
+     * @param {number} [options.topk] The number of top predictions that will be returned by the pipeline.
+     * If the provided number is `null` or higher than the number of predictions available, it will default
+     * to the number of predictions.
+     * @param {boolean} [options.percentage=false] Whether to return the boxes coordinates in percentage (true) or in pixels (false).
+     * @returns {Promise<any>} An array of classifications for each input image or a single classification object if only one input image is provided.
+     */
+    async _call(images, candidate_labels, {
+        threshold = 0.1,
+        topk = null,
+        percentage = false,
+    } = {}) {
+        const isBatched = Array.isArray(images);
+        images = await prepareImages(images);
+
+        // Run tokenization
+        const text_inputs = this.tokenizer(candidate_labels, {
+            padding: true,
+            truncation: true
+        });
+
+        // Run processor
+        const model_inputs = await this.processor(images);
+
+        // Since non-maximum suppression is performed for exporting, we need to
+        // process each image separately. For more information, see:
+        // https://github.com/huggingface/optimum/blob/e3b7efb1257c011db907ef40ab340e795cc5684c/optimum/exporters/onnx/model_configs.py#L1028-L1032
+        const toReturn = [];
+        for (let i = 0; i < images.length; ++i) {
+            const image = images[i];
+            const imageSize = percentage ? null : [[image.height, image.width]];
+            const pixel_values = model_inputs.pixel_values[i].unsqueeze_(0);
+
+            // Run model with both text and pixel inputs
+            const output = await this.model({ ...text_inputs, pixel_values });
+
+            // @ts-ignore
+            const processed = this.processor.feature_extractor.post_process_object_detection(output, threshold, imageSize, true)[0];
+            let result = processed.boxes.map((box, i) => ({
+                score: processed.scores[i],
+                label: candidate_labels[processed.classes[i]],
+                box: get_bounding_box(box, !percentage),
+            })).sort((a, b) => b.score - a.score);
+            if (topk !== null) {
+                result = result.slice(0, topk);
+            }
+            toReturn.push(result)
+        }
+
+        return isBatched ? toReturn : toReturn[0];
+    }
+}
+
+/**
+ * Document Question Answering pipeline using any `AutoModelForDocumentQuestionAnswering`.
+ * The inputs/outputs are similar to the (extractive) question answering pipeline; however,
+ * the pipeline takes an image (and optional OCR'd words/boxes) as input instead of text context.
+ * 
+ * **Example:** Answer questions about a document with `Xenova/donut-base-finetuned-docvqa`.
+ * ```javascript
+ * let image = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/invoice.png';
+ * let question = 'What is the invoice number?';
+ * 
+ * let qa_pipeline = await pipeline('document-question-answering', 'Xenova/donut-base-finetuned-docvqa');
+ * let output = await qa_pipeline(image, question);
+ * // [{ answer: 'us-001' }]
+ * ```
+ */
+export class DocumentQuestionAnsweringPipeline extends Pipeline {
+    /**
+     * Create a new DocumentQuestionAnsweringPipeline.
+     * @param {Object} options An object containing the following properties:
+     * @param {string} [options.task] The task of the pipeline. Useful for specifying subtasks.
+     * @param {PreTrainedModel} [options.model] The model to use.
+     * @param {PreTrainedTokenizer} [options.tokenizer] The tokenizer to use.
+     * @param {Processor} [options.processor] The processor to use.
+     */
+    constructor(options) {
+        super(options);
+    }
+
+    /**
+     * Answer the question given as input by using the document.
+     * @param {any} image The image of the document to use.
+     * @param {string} question A question to ask of the document.
+     * @param {Object} [generate_kwargs={}] Optional generation arguments.
+     * @returns {Promise<Object|Object[]>} A Promise that resolves to an object (or array of objects) containing the generated text(s).
+     */
+    async _call(image, question, generate_kwargs = {}) {
+        // NOTE: For now, we only support a batch size of 1
+
+        // Preprocess image
+        image = (await prepareImages(image))[0];
+        const { pixel_values } = await this.processor(image);
+
+        // Run tokenization
+        const task_prompt = `<s_docvqa><s_question>${question}</s_question><s_answer>`;
+        const decoder_input_ids = this.tokenizer(task_prompt, {
+            add_special_tokens: false,
+            padding: true,
+            truncation: true
+        }).input_ids;
+
+        // Run model
+        const output = await this.model.generate(
+            pixel_values,
+            {
+                ...generate_kwargs,
+                decoder_input_ids,
+                max_length: this.model.config.decoder.max_position_embeddings,
+            }
+        );
+
+        // Decode output
+        const decoded = this.tokenizer.batch_decode(output)[0];
+
+        // Parse answer
+        const match = decoded.match(/<s_answer>(.*?)<\/s_answer>/);
+        let answer = null;
+        if (match && match.length >= 2) {
+            answer = match[1].trim();
+        }
+        return [{ answer }];
+    }
+}
+
+/**
+ * Text-to-audio generation pipeline using any `AutoModelForTextToWaveform` or `AutoModelForTextToSpectrogram`.
+ * This pipeline generates an audio file from an input text and optional other conditional inputs.
+ * 
+ * **Example:** Generate audio from text with `Xenova/speecht5_tts`.
+ * ```js
+ * let speaker_embeddings = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/speaker_embeddings.bin';
+ * let synthesizer = await pipeline('text-to-speech', 'Xenova/speecht5_tts', { quantized: false });
+ * let out = await synthesizer('Hello, my dog is cute', { speaker_embeddings });
+ * // {
+ * //   audio: Float32Array(26112) [-0.00005657337896991521, 0.00020583874720614403, ...],
+ * //   sampling_rate: 16000
+ * // }
+ * ```
+ * 
+ * You can then save the audio to a .wav file with the `wavefile` package:
+ * ```js
+ * import wavefile from 'wavefile';
+ * import fs from 'fs';
+ * 
+ * let wav = new wavefile.WaveFile();
+ * wav.fromScratch(1, out.sampling_rate, '32f', out.audio);
+ * fs.writeFileSync('out.wav', wav.toBuffer());
+ * ```
+ */
+export class TextToAudioPipeline extends Pipeline {
+    DEFAULT_VOCODER_ID = "Xenova/speecht5_hifigan"
+
+    /**
+     * Create a new TextToAudioPipeline.
+     * @param {Object} options An object containing the following properties:
+     * @param {string} [options.task] The task of the pipeline. Useful for specifying subtasks.
+     * @param {PreTrainedModel} [options.model] The model to use.
+     * @param {PreTrainedTokenizer} [options.tokenizer] The tokenizer to use.
+     * @param {Processor} [options.processor] The processor to use.
+     * @param {PreTrainedModel} [options.vocoder] The vocoder to use.
+     */
+    constructor(options) {
+        super(options);
+
+        // TODO: Find a better way for `pipeline` to set the default vocoder
+        this.vocoder = options.vocoder ?? null;
+    }
+
+    /**
+     * Generates speech/audio from the inputs.
+     * @param {string|string[]} text_inputs The text(s) to generate.
+     * @param {Object} options Parameters passed to the model generation/forward method.
+     * @param {PreTrainedModel} [options.vocoder=null] The vocoder to use (if the model uses one). If not provided, use the default HifiGan vocoder.
+     * @param {Tensor|Float32Array|string|URL} [options.speaker_embeddings=null]
+     * @returns {Promise<Object>} An object containing the generated audio and sampling rate.
+     */
+    async _call(text_inputs, {
+        speaker_embeddings = null,
+    } = {}) {
+        // Load vocoder, if not provided
+        if (!this.vocoder) {
+            console.log('No vocoder specified, using default HifiGan vocoder.');
+            this.vocoder = await AutoModel.from_pretrained(this.DEFAULT_VOCODER_ID, { quantized: false });
+        }
+
+        // Load speaker embeddings as Float32Array from path/URL
+        if (typeof speaker_embeddings === 'string' || speaker_embeddings instanceof URL) {
+            // Load from URL with fetch
+            speaker_embeddings = new Float32Array(
+                await (await fetch(speaker_embeddings)).arrayBuffer()
+            );
+        }
+
+        if (speaker_embeddings instanceof Float32Array) {
+            speaker_embeddings = new Tensor(
+                'float32',
+                speaker_embeddings,
+                [1, speaker_embeddings.length]
+            )
+        } else if (!(speaker_embeddings instanceof Tensor)) {
+            throw new Error("Speaker embeddings must be a `Tensor`, `Float32Array`, `string`, or `URL`.")
+        }
+
+        // Run tokenization
+        const { input_ids } = this.tokenizer(text_inputs, {
+            padding: true,
+            truncation: true
+        });
+
+        // NOTE: At this point, we are guaranteed that `speaker_embeddings` is a `Tensor`
+        // @ts-ignore
+        const { waveform } = await this.model.generate_speech(input_ids, speaker_embeddings, { vocoder: this.vocoder });
+
+        const sampling_rate = this.processor.feature_extractor.config.sampling_rate;
+        return {
+            audio: waveform.data,
+            sampling_rate,
+        }
+    }
+}
+
+/**
+ * Image to Image pipeline using any `AutoModelForImageToImage`. This pipeline generates an image based on a previous image input.
+ * 
+ * **Example:** Super-resolution w/ `Xenova/swin2SR-classical-sr-x2-64`
+ * ```javascript
+ * let url = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/butterfly.jpg';
+ * let upscaler = await pipeline('image-to-image', 'Xenova/swin2SR-classical-sr-x2-64');
+ * let output = await upscaler(url);
+ * // RawImage {
+ * //   data: Uint8Array(786432) [ 41, 31, 24,  43, ... ],
+ * //   width: 512,
+ * //   height: 512,
+ * //   channels: 3
+ * // }
+ * ```
+ */
+export class ImageToImagePipeline extends Pipeline {
+    /**
+     * Transform the image(s) passed as inputs.
+     * @param {any} images The images to transform.
+     * @returns {Promise<any>} An image or a list of images containing result(s).
+     */
+    async _call(images) {
+        images = await prepareImages(images);
+
+        let inputs = await this.processor(images);
+        let outputs = await this.model(inputs);
+
+        let toReturn = [];
+        for (let batch of outputs.reconstruction) {
+            const output = batch.squeeze().clamp_(0, 1).mul_(255).round_().to('uint8');
+            toReturn.push(RawImage.fromTensor(output));
+        }
+
+        return toReturn.length > 1 ? toReturn : toReturn[0];
+    }
+}
+
+/**
+ * Depth estimation pipeline using any `AutoModelForDepthEstimation`. This pipeline predicts the depth of an image.
+ * 
+ * **Example:** Depth estimation w/ `Xenova/dpt-hybrid-midas`
+ * ```javascript
+ * let url = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/cats.jpg';
+ * let depth_estimator = await pipeline('depth-estimation', 'Xenova/dpt-hybrid-midas');
+ * let out = await depth_estimator(url);
+ * // {
+ * //   predicted_depth: Tensor {
+ * //     dims: [ 384, 384 ],
+ * //     type: 'float32',
+ * //     data: Float32Array(147456) [ 542.859130859375, 545.2833862304688, 546.1649169921875, ... ],
+ * //     size: 147456
+ * //   },
+ * //   depth: RawImage {
+ * //     data: Uint8Array(307200) [ 86, 86, 86, ... ],
+ * //     width: 640,
+ * //     height: 480,
+ * //     channels: 1
+ * //   }
+ * // }
+ * ```
+ */
+export class DepthEstimationPipeline extends Pipeline {
+    /**
+     * Predicts the depth for the image(s) passed as inputs.
+     * @param {any} images The images to compute depth for.
+     * @returns {Promise<any>} An image or a list of images containing result(s).
+     */
+    async _call(images) {
+        images = await prepareImages(images);
+
+        const inputs = await this.processor(images);
+        const { predicted_depth } = await this.model(inputs);
+
+        const toReturn = [];
+        for (let i = 0; i < images.length; ++i) {
+            const prediction = interpolate(predicted_depth[i], images[i].size.reverse(), 'bilinear', false);
+            const formatted = prediction.mul_(255 / max(prediction.data)[0]).to('uint8');
+            toReturn.push({
+                predicted_depth: predicted_depth[i],
+                depth: RawImage.fromTensor(formatted),
+            });
+        }
+
+        return toReturn.length > 1 ? toReturn : toReturn[0];
     }
 }
 
@@ -1873,10 +2382,22 @@ const SUPPORTED_TASKS = {
         },
         "type": "audio",
     },
+    "zero-shot-audio-classification": {
+        "tokenizer": AutoTokenizer,
+        "pipeline": ZeroShotAudioClassificationPipeline,
+        "model": AutoModel,
+        "processor": AutoProcessor,
+        "default": {
+            // TODO: replace with original
+            // "model": "laion/clap-htsat-fused",
+            "model": "Xenova/clap-htsat-unfused",
+        },
+        "type": "multimodal",
+    },
     "automatic-speech-recognition": {
         "tokenizer": AutoTokenizer,
         "pipeline": AutomaticSpeechRecognitionPipeline,
-        "model": [AutoModelForSeq2SeqLM, AutoModelForCTC],
+        "model": [AutoModelForSpeechSeq2Seq, AutoModelForCTC],
         "processor": AutoProcessor,
         "default": {
             // TODO: replace with original
@@ -1885,7 +2406,18 @@ const SUPPORTED_TASKS = {
         },
         "type": "multimodal",
     },
-
+    "text-to-audio": {
+        "tokenizer": AutoTokenizer,
+        "pipeline": TextToAudioPipeline,
+        "model": [ /* TODO: AutoModelForTextToWaveform, */ AutoModelForTextToSpectrogram],
+        "processor": AutoProcessor,
+        "default": {
+            // TODO: replace with original
+            // "model": "microsoft/speecht5_tts",
+            "model": "Xenova/speecht5_tts",
+        },
+        "type": "text",
+    },
     "image-to-text": {
         "tokenizer": AutoTokenizer,
         "pipeline": ImageToTextPipeline,
@@ -1951,6 +2483,54 @@ const SUPPORTED_TASKS = {
         },
         "type": "multimodal",
     },
+    "zero-shot-object-detection": {
+        "tokenizer": AutoTokenizer,
+        "pipeline": ZeroShotObjectDetectionPipeline,
+        "model": AutoModelForZeroShotObjectDetection,
+        "processor": AutoProcessor,
+        "default": {
+            // TODO: replace with original
+            // "model": "google/owlvit-base-patch32",
+            "model": "Xenova/owlvit-base-patch32",
+        },
+        "type": "multimodal",
+    },
+    "document-question-answering": {
+        "tokenizer": AutoTokenizer,
+        "pipeline": DocumentQuestionAnsweringPipeline,
+        "model": AutoModelForDocumentQuestionAnswering,
+        "processor": AutoProcessor,
+        "default": {
+            // TODO: replace with original
+            // "model": "naver-clova-ix/donut-base-finetuned-docvqa",
+            "model": "Xenova/donut-base-finetuned-docvqa",
+        },
+        "type": "multimodal",
+    },
+    "image-to-image": {
+        // no tokenizer
+        "pipeline": ImageToImagePipeline,
+        "model": AutoModelForImageToImage,
+        "processor": AutoProcessor,
+        "default": {
+            // TODO: replace with original
+            // "model": "caidas/swin2SR-classical-sr-x2-64",
+            "model": "Xenova/swin2SR-classical-sr-x2-64",
+        },
+        "type": "image",
+    },
+    "depth-estimation": {
+        // no tokenizer
+        "pipeline": DepthEstimationPipeline,
+        "model": AutoModelForDepthEstimation,
+        "processor": AutoProcessor,
+        "default": {
+            // TODO: replace with original
+            // "model": "Intel/dpt-large",
+            "model": "Xenova/dpt-large",
+        },
+        "type": "image",
+    },
 
     // This task serves as a useful interface for dealing with sentence-transformers (https://huggingface.co/sentence-transformers).
     "feature-extraction": {
@@ -1972,14 +2552,11 @@ const TASK_ALIASES = {
     "ner": "token-classification",
     "vqa": "visual-question-answering",
     "asr": "automatic-speech-recognition",
+    "text-to-speech": "text-to-audio",
 
     // Add for backwards compatibility
     "embeddings": "feature-extraction",
 }
-
-/**
- * @typedef {import('./utils/hub.js').PretrainedOptions} PretrainedOptions
- */
 
 /**
  * Utility factory method to build a [`Pipeline`] object.
@@ -1987,6 +2564,8 @@ const TASK_ALIASES = {
  * @param {string} task The task defining which pipeline will be returned. Currently accepted tasks are:
  *  - `"audio-classification"`: will return a `AudioClassificationPipeline`.
  *  - `"automatic-speech-recognition"`: will return a `AutomaticSpeechRecognitionPipeline`.
+ *  - `"depth-estimation"`: will return a `DepthEstimationPipeline`.
+ *  - `"document-question-answering"`: will return a `DocumentQuestionAnsweringPipeline`.
  *  - `"feature-extraction"`: will return a `FeatureExtractionPipeline`.
  *  - `"fill-mask"`: will return a `FillMaskPipeline`.
  *  - `"image-classification"`: will return a `ImageClassificationPipeline`.
@@ -2002,9 +2581,11 @@ const TASK_ALIASES = {
  *  - `"translation"`: will return a `TranslationPipeline`.
  *  - `"translation_xx_to_yy"`: will return a `TranslationPipeline`.
  *  - `"zero-shot-classification"`: will return a `ZeroShotClassificationPipeline`.
+ *  - `"zero-shot-audio-classification"`: will return a `ZeroShotAudioClassificationPipeline`.
  *  - `"zero-shot-image-classification"`: will return a `ZeroShotImageClassificationPipeline`.
+ *  - `"zero-shot-object-detection"`: will return a `ZeroShotObjectDetectionPipeline`.
  * @param {string} [model=null] The name of the pre-trained model to use. If not specified, the default model for the task will be used.
- * @param {PretrainedOptions} [options] Optional parameters for the pipeline.
+ * @param {import('./utils/hub.js').PretrainedOptions} [options] Optional parameters for the pipeline.
  * @returns {Promise<Pipeline>} A Pipeline object for the specified task.
  * @throws {Error} If an unsupported pipeline is requested.
  */
@@ -2073,7 +2654,7 @@ export async function pipeline(
  * Helper function to get applicable model, tokenizer, or processor classes for a given model.
  * @param {Map<string, any>} mapping The mapping of names to classes, arrays of classes, or null.
  * @param {string} model The name of the model to load.
- * @param {PretrainedOptions} pretrainedOptions The options to pass to the `from_pretrained` method.
+ * @param {import('./utils/hub.js').PretrainedOptions} pretrainedOptions The options to pass to the `from_pretrained` method.
  * @private
  */
 async function loadItems(mapping, model, pretrainedOptions) {

@@ -5,12 +5,13 @@ import json
 import os
 
 from transformers import AutoTokenizer, AutoConfig
+import numpy as np
 
 from scripts.supported_models import SUPPORTED_MODELS
 
 # List of tokenizers where the model isn't yet supported, but the tokenizer is
 ADDITIONAL_TOKENIZERS_TO_TEST = {
-    'RefinedWebModel': [
+    'falcon': [
         'tiiuae/falcon-7b',
     ],
     "llama": [
@@ -28,6 +29,9 @@ MODELS_TO_IGNORE = [
 
     # TODO: remove when https://github.com/huggingface/transformers/issues/26018 is fixed
     'marian',
+
+    # TODO: remove when https://github.com/huggingface/transformers/issues/26547 is fixed
+    'speecht5',
 ]
 
 TOKENIZERS_TO_IGNORE = [
@@ -107,11 +111,18 @@ TOKENIZER_TEST_DATA = {
 }
 
 
+FLATTENED_SUPPORTED_MODELS = [
+    (model_type, [
+        model for task_models in tasks.values() for model in task_models
+    ]) for model_type, tasks in SUPPORTED_MODELS.items()
+]
+
+
 def generate_tokenizer_tests():
 
     results = {}
 
-    tokenizers_to_test = list(SUPPORTED_MODELS.items()) + \
+    tokenizers_to_test = FLATTENED_SUPPORTED_MODELS + \
         list(ADDITIONAL_TOKENIZERS_TO_TEST.items())
 
     for model_type, tokenizer_names in tokenizers_to_test:
@@ -176,7 +187,7 @@ def generate_tokenizer_tests():
 
 def generate_config_tests():
     results = {}
-    for model_type, config_names in SUPPORTED_MODELS.items():
+    for model_type, config_names in FLATTENED_SUPPORTED_MODELS:
         print(f'Generating tests for {model_type}')
 
         for config_name in config_names:
@@ -195,6 +206,37 @@ def generate_config_tests():
     return results
 
 
+ARRAY_SIZES = sorted(set([2 ** i for i in range(1, 10)]) \
+    | set([3 ** i for i in range(1, 8)]) \
+    | set([5 ** i for i in range(1, 6)]) \
+    | set([7 ** i for i in range(1, 4)]))
+
+
+def serialize_complex_array(arr):
+    return [float(x) for y in arr for x in [y.real, y.imag]]
+
+
+def serialize_real_array(arr):
+    return arr.tolist()
+
+
+def generate_fft_tests():
+    np.random.seed(0)
+    tests = {}
+    for complex in [False, True]:
+        serialize_fn = serialize_complex_array if complex else serialize_real_array
+        for size in ARRAY_SIZES:
+            arr = np.random.randn(size).astype(np.complex64 if complex else np.float64)
+            if complex:
+                arr += np.random.randn(size) * 1j
+            tests[f"fft_{size}_{'complex' if complex else 'real'}"] = {
+                "complex": complex,
+                "input": serialize_fn(arr),
+                "output": serialize_complex_array(np.fft.fft(arr)),
+            }
+    return tests
+
+
 def main():
     # TODO add option to cache generated data + force build tests
 
@@ -210,6 +252,9 @@ def main():
     with open(os.path.join(data_dir, "config_tests.json"), "w", encoding="utf-8") as fp:
         json.dump(config_tests, fp)
 
-
+    fft_tests = generate_fft_tests()
+    with open(os.path.join(data_dir, "fft_tests.json"), "w", encoding="utf-8") as fp:
+        json.dump(fft_tests, fp)
+    
 if __name__ == "__main__":
     main()

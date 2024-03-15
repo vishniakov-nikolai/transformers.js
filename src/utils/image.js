@@ -16,6 +16,7 @@ import { env } from '../env.js';
 import sharp from 'sharp';
 
 const BROWSER_ENV = typeof self !== 'undefined';
+const WEBWORKER_ENV = BROWSER_ENV && self.constructor.name === 'DedicatedWorkerGlobalScope';
 
 let createCanvasFunction;
 let ImageDataClass;
@@ -64,17 +65,17 @@ const RESAMPLING_MAPPING = {
     5: 'hamming',
 }
 
-export class RawImage {
+/**
+ * Mapping from file extensions to MIME types.
+ */
+const CONTENT_TYPE_MAP = new Map([
+    ['png', 'image/png'],
+    ['jpg', 'image/jpeg'],
+    ['jpeg', 'image/jpeg'],
+    ['gif', 'image/gif'],
+]);
 
-    /**
-     * Mapping from file extensions to MIME types.
-     */
-    _CONTENT_TYPE_MAP = {
-        'png': 'image/png',
-        'jpg': 'image/jpeg',
-        'jpeg': 'image/jpeg',
-        'gif': 'image/gif',
-    }
+export class RawImage {
 
     /**
      * Create a new `RawImage` object.
@@ -84,7 +85,14 @@ export class RawImage {
      * @param {1|2|3|4} channels The number of channels.
      */
     constructor(data, width, height, channels) {
-        this._update(data, width, height, channels);
+        this.data = data;
+        this.width = width;
+        this.height = height;
+        this.channels = channels;
+    }
+
+    get size() {
+        return [this.width, this.height];
     }
 
     /**
@@ -95,7 +103,7 @@ export class RawImage {
      * **Example:** Read image from a URL.
      * ```javascript
      * let image = await RawImage.read('https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/football-match.jpg');
-     * // test {
+     * // RawImage {
      * //   "data": Uint8ClampedArray [ 25, 25, 25, 19, 19, 19, ... ],
      * //   "width": 800,
      * //   "height": 533,
@@ -151,6 +159,21 @@ export class RawImage {
 
             return await loadImageFunction(img);
         }
+    }
+
+    /**
+     * Helper method to create a new Image from a tensor
+     * @param {import('./tensor.js').Tensor} tensor 
+     */
+    static fromTensor(tensor, channel_format = 'CHW') {
+        if (channel_format === 'CHW') {
+            tensor = tensor.transpose(1, 2, 0);
+        } else if (channel_format === 'HWC') {
+            // Do nothing
+        } else {
+            throw new Error(`Unsupported channel format: ${channel_format}`);
+        }
+        return new RawImage(tensor.data, tensor.dims[1], tensor.dims[0], tensor.dims[2]);
     }
 
     /**
@@ -369,6 +392,58 @@ export class RawImage {
         }
     }
 
+    async crop([x_min, y_min, x_max, y_max]) {
+        // Ensure crop bounds are within the image
+        x_min = Math.max(x_min, 0);
+        y_min = Math.max(y_min, 0);
+        x_max = Math.min(x_max, this.width - 1);
+        y_max = Math.min(y_max, this.height - 1);
+
+        // Do nothing if the crop is the entire image
+        if (x_min === 0 && y_min === 0 && x_max === this.width - 1 && y_max === this.height - 1) {
+            return this;
+        }
+
+        const crop_width = x_max - x_min + 1;
+        const crop_height = y_max - y_min + 1;
+
+        if (BROWSER_ENV) {
+            // Store number of channels before resizing
+            const numChannels = this.channels;
+
+            // Create canvas object for this image
+            const canvas = this.toCanvas();
+
+            // Create a new canvas of the desired size. This is needed since if the 
+            // image is too small, we need to pad it with black pixels.
+            const ctx = createCanvasFunction(crop_width, crop_height).getContext('2d');
+
+            // Draw image to context, cropping in the process
+            ctx.drawImage(canvas,
+                x_min, y_min, crop_width, crop_height,
+                0, 0, crop_width, crop_height
+            );
+
+            // Create image from the resized data
+            const resizedImage = new RawImage(ctx.getImageData(0, 0, crop_width, crop_height).data, crop_width, crop_height, 4);
+
+            // Convert back so that image has the same number of channels as before
+            return resizedImage.convert(numChannels);
+
+        } else {
+            // Create sharp image from raw data
+            const img = this.toSharp().extract({
+                left: x_min,
+                top: y_min,
+                width: crop_width,
+                height: crop_height,
+            });
+
+            return await loadImageFunction(img);
+        }
+
+    }
+
     async center_crop(crop_width, crop_height) {
         // If the image is already the desired size, return it
         if (this.width === crop_width && this.height === crop_height) {
@@ -484,6 +559,15 @@ export class RawImage {
         }
     }
 
+    async toBlob(type = 'image/png', quality = 1) {
+        if (!BROWSER_ENV) {
+            throw new Error('toBlob() is only supported in browser environments.')
+        }
+
+        const canvas = this.toCanvas();
+        return await canvas.convertToBlob({ type, quality });
+    }
+
     toCanvas() {
         if (!BROWSER_ENV) {
             throw new Error('toCanvas() is only supported in browser environments.')
@@ -508,7 +592,8 @@ export class RawImage {
      * @param {Uint8ClampedArray} data The new image data.
      * @param {number} width The new width of the image.
      * @param {number} height The new height of the image.
-     * @param {1|2|3|4} channels The new number of channels of the image.
+     * @param {1|2|3|4|null} [channels] The new number of channels of the image.
+     * @private
      */
     _update(data, width, height, channels = null) {
         this.data = data;
@@ -556,17 +641,21 @@ export class RawImage {
      * Save the image to the given path.
      * @param {string} path The path to save the image to.
      */
-    save(path) {
+    async save(path) {
 
         if (BROWSER_ENV) {
-            const extension = path.split('.').pop().toLowerCase();
-            const mime = this._CONTENT_TYPE_MAP[extension] ?? 'image/png';
+            if (WEBWORKER_ENV) {
+                throw new Error('Unable to save an image from a Web Worker.')
+            }
 
-            // Convert image to canvas
-            const canvas = this.toCanvas();
+            const extension = path.split('.').pop().toLowerCase();
+            const mime = CONTENT_TYPE_MAP.get(extension) ?? 'image/png';
+
+            // Convert image to Blob
+            const blob = await this.toBlob(mime);
 
             // Convert the canvas content to a data URL
-            const dataURL = canvas.toDataURL(mime);
+            const dataURL = URL.createObjectURL(blob);
 
             // Create an anchor element with the data URL as the href attribute
             const downloadLink = document.createElement('a');
@@ -586,7 +675,7 @@ export class RawImage {
 
         } else {
             const img = this.toSharp();
-            img.toFile(path);
+            return await img.toFile(path);
         }
     }
 
