@@ -1,6 +1,6 @@
-## [WIP] Integration of openvinojs-node package in transformers.js library
+## [WIP] Integration of openvino-node package in transformers.js library
 
-Example of usage you can find here: `./examples/openvinojs-node`
+Example of usage you can find here: `./examples/openvino-node`
 
 ### Requirements:
 
@@ -9,13 +9,10 @@ Example of usage you can find here: `./examples/openvinojs-node`
 
 ### Install:
 
-1. Run `git clone git@github.com:vishniakov-nikolai/openvino.git -b feature/nlp-infer`
-1. In clonned openvino directory, in `./src/bindings/js/node` Run `npm i`
-1. Set in `./examples/openvinojs-node/package.json` path for `"@xenova/transformers": "file:**path_to_openvino_repo**"`
 1. Run `npm install` from **transformers.js** directory
 1. Clone [codegen-350M-mono](https://huggingface.co/Salesforce/codegen-350M-mono) or [decicoder-1b-openvino-int8](https://huggingface.co/chgk13/decicoder-1b-openvino-int8) model
-1. Specify path to models directory in `./examples/openvinojs-node/index.js`
-1. Run `node index.js` from `./examples/openvinojs-node` directory
+1. Specify path to models directory in `./examples/openvino-node/index.js`
+1. Run `node index.js` from `./examples/openvino-node` directory
 
 ### Limitations:
 - Works only in Node.js environment

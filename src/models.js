@@ -87,7 +87,7 @@ import {
 
 import { executionProviders, ONNX } from './backends/onnx.js';
 import { medianFilter } from './transformers.js';
-import * as OpenVINONode from 'openvinojs-node';
+import * as OpenVINONode from 'openvino-node';
 
 const { addon: ov } = OpenVINONode;
 const { InferenceSession, Tensor: ONNXTensor, env } = ONNX;
@@ -227,7 +227,7 @@ async function constructSession(pretrained_model_name_or_path, fileName, options
     // TODO add option for user to force specify their desired execution provider
     // FIXME: rewrite this detection
     if (Array.isArray(fileName) || /\.xml$/.test(fileName)) {
-        console.log('OVModel model passed, openvinojs-node is using');
+        console.log('OVModel model passed, openvino-node is using');
 
         return await getWrappedOVModelByPath(pretrained_model_name_or_path,
             fileName, options);
