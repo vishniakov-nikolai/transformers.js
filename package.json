@@ -40,7 +40,8 @@
   "dependencies": {
     "onnxruntime-web": "1.14.0",
     "sharp": "^0.32.0",
-    "@huggingface/jinja": "^0.2.1"
+    "@huggingface/jinja": "^0.2.1",
+    "openvino-node": "^2024.0.0"
   },
   "optionalDependencies": {
     "onnxruntime-node": "1.14.0"

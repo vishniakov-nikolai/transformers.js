@@ -1,8 +1,27 @@
+## [WIP] Integration of openvino-node package in transformers.js library
+
+Example of usage you can find here: `./examples/openvino-node`
+
+### Requirements:
+
+- Installed openvino-runtime in OS
+- Clonned https://github.com/vishniakov-nikolai/openvino/tree/feature/nlp-infer
+
+### Install:
+
+1. Run `npm install` from **transformers.js** directory
+1. Clone [codegen-350M-mono](https://huggingface.co/Salesforce/codegen-350M-mono) or [decicoder-1b-openvino-int8](https://huggingface.co/chgk13/decicoder-1b-openvino-int8) model
+1. Specify path to models directory in `./examples/openvino-node/index.js`
+1. Run `node index.js` from `./examples/openvino-node` directory
+
+### Limitations:
+- Works only in Node.js environment
+- Partially supports (codegen-350M-mono, decicoder-1b-openvino-int8)
 
 
 <p align="center">
     <br/>
-    <picture> 
+    <picture>
         <source media="(prefers-color-scheme: dark)" srcset="https://huggingface.co/datasets/Xenova/transformers.js-docs/raw/main/transformersjs-dark.svg" width="500" style="max-width: 100%;">
         <source media="(prefers-color-scheme: light)" srcset="https://huggingface.co/datasets/Xenova/transformers.js-docs/raw/main/transformersjs-light.svg" width="500" style="max-width: 100%;">
         <img alt="transformers.js javascript library logo" src="https://huggingface.co/datasets/Xenova/transformers.js-docs/raw/main/transformersjs-light.svg" width="500" style="max-width: 100%;">
@@ -37,7 +56,7 @@ Transformers.js is designed to be functionally equivalent to Hugging Face's [tra
   - 🗣️ **Audio**: automatic speech recognition and audio classification.
   - 🐙 **Multimodal**: zero-shot image classification.
 
-Transformers.js uses [ONNX Runtime](https://onnxruntime.ai/) to run models in the browser. The best part about it, is that you can easily [convert](#convert-your-models-to-onnx) your pretrained PyTorch, TensorFlow, or JAX models to ONNX using [🤗 Optimum](https://github.com/huggingface/optimum#onnx--onnx-runtime). 
+Transformers.js uses [ONNX Runtime](https://onnxruntime.ai/) to run models in the browser. The best part about it, is that you can easily [convert](#convert-your-models-to-onnx) your pretrained PyTorch, TensorFlow, or JAX models to ONNX using [🤗 Optimum](https://github.com/huggingface/optimum#onnx--onnx-runtime).
 
 For more information, check out the full [documentation](https://huggingface.co/docs/transformers.js).
 

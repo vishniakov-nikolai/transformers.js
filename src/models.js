@@ -1,9 +1,9 @@
 
 /**
  * @file Definitions of all models available in Transformers.js.
- * 
+ *
  * **Example:** Load and run an `AutoModel`.
- * 
+ *
  * ```javascript
  * import { AutoModel, AutoTokenizer } from '@xenova/transformers';
  *
@@ -19,13 +19,13 @@
  * //     size: 183132,
  * // }
  * ```
- * 
+ *
  * We also provide other `AutoModel`s (listed below), which you can use in the same way as the Python library. For example:
  * 
  * **Example:** Load and run an `AutoModelForSeq2SeqLM`.
  * ```javascript
  * import { AutoModelForSeq2SeqLM, AutoTokenizer } from '@xenova/transformers';
- * 
+ *
  * let tokenizer = await AutoTokenizer.from_pretrained('Xenova/t5-small');
  * let model = await AutoModelForSeq2SeqLM.from_pretrained('Xenova/t5-small');
  *
@@ -34,7 +34,7 @@
  * let decoded = tokenizer.decode(outputs[0], { skip_special_tokens: true });
  * // 'Ich liebe Transformatoren!'
  * ```
- * 
+ *
  * @module models
  */
 
@@ -83,9 +83,13 @@ import {
 
 import { executionProviders, ONNX } from './backends/onnx.js';
 import { medianFilter } from './transformers.js';
+import * as OpenVINONode from 'openvino-node';
+
+const { addon: ov } = OpenVINONode;
 const { InferenceSession, Tensor: ONNXTensor, env } = ONNX;
 
 /** @typedef {import('onnxruntime-web').InferenceSession} InferenceSession */
+
 
 //////////////////////////////////////////////////
 // Model types: used internally
@@ -109,6 +113,105 @@ const MODEL_NAME_TO_CLASS_MAPPING = new Map();
 const MODEL_CLASS_TO_NAME_MAPPING = new Map();
 
 
+async function getWrappedOVModelByPath(modelDir, filename, options) {
+    const filenames = Array.isArray(filename) ? filename : [filename];
+    const modelFiles = [];
+
+    for (const filename of filenames) {
+        const file = await getModelFile(modelDir, filename, true, options);
+
+        modelFiles.push(file);
+    }
+
+    const core = new ov.Core();
+    const model = await core.readModel(...modelFiles);
+    const inputNames = model.inputs.map(i => i.toString());
+    const keyValueInputNames = inputNames.filter(i => i.includes('key_values'));
+    const compiledModel = await core.compileModel(model, 'CPU');
+
+    return {
+        run: async (inputData) => {
+            const inputKeys = Object.keys(inputData);
+
+            const ir = compiledModel.createInferRequest();
+            const tensorsDict = {
+                'input_ids': convertToOVTensor(inputData['input_ids']),
+                'attention_mask': convertToOVTensor(inputData['attention_mask']),
+            };
+
+            if (inputKeys.find(i => i.includes('key_values'))) {
+                keyValueInputNames.forEach(name => {
+                    const { type, dims, data } = inputData[name];
+
+                    tensorsDict[name] = data.length
+                        ? convertToOVTensor(inputData[name])
+                        : new ov.Tensor(precisionToOV(type), dims);
+                });
+            }
+            else {
+                // FIXME: here uses dims from transformers.js Tensor
+                const shapeInputIds = inputData['input_ids'].dims;
+
+                keyValueInputNames.forEach(name => {
+                    const shape = compiledModel.input(name).getPartialShape();
+
+                    shape[0] =
+                        // FIXME: multiply on num_attention_heads number from config
+                        shapeInputIds[0] * 1;
+
+                    if (shape[1] === -1) shape[1] = 0;
+                    if (shape[2] === -1) shape[2] = 0;
+
+                    // FIXME: replace hardcoded precision (expose input layer precision from bindings)
+                    tensorsDict[name] = new ov.Tensor(ov.element.f32, shape);
+                });
+            }
+
+            const result = await ir.inferAsync(tensorsDict);
+            const modifiedOutput = {};
+
+            Object.keys(result).forEach(name => {
+                const ovTensor = result[name];
+                const type = parseOVPrecision(ovTensor.getElementType());
+                const shape = ovTensor.getShape();
+
+                modifiedOutput[name] = new Tensor(type, ovTensor.data, shape);
+            });
+
+            return modifiedOutput;
+        },
+        inputNames,
+    };
+
+    function convertToOVTensor(inputTensor) {
+        const { dims, type, data } = inputTensor;
+
+        return new ov.Tensor(precisionToOV(type), dims, data);
+    }
+
+    function precisionToOV(str) {
+        switch(str) {
+            case 'int64':
+                return ov.element.i64;
+            case 'float32':
+                return ov.element.f32;
+            default:
+                throw new Error(`Undefined precision: ${str}`);
+        }
+    }
+
+    function parseOVPrecision(elementType) {
+        switch(elementType) {
+            case ov.element.i64:
+                return 'int64';
+            case ov.element.f32:
+                return 'float32';
+            default:
+                throw new Error(`Undefined precision: ${elementType}`);
+        }
+    }
+}
+
 /**
  * Constructs an InferenceSession using a model file located at the specified path.
  * @param {string} pretrained_model_name_or_path The path to the directory containing the model file.
@@ -119,6 +222,14 @@ const MODEL_CLASS_TO_NAME_MAPPING = new Map();
  */
 async function constructSession(pretrained_model_name_or_path, fileName, options) {
     // TODO add option for user to force specify their desired execution provider
+    // FIXME: rewrite this detection
+    if (Array.isArray(fileName) || /\.xml$/.test(fileName)) {
+        console.log('OVModel model passed, openvino-node is using');
+
+        return await getWrappedOVModelByPath(pretrained_model_name_or_path,
+            fileName, options);
+    }
+
     let modelFileName = `onnx/${fileName}${options.quantized ? '_quantized' : ''}.onnx`;
     let buffer = await getModelFile(pretrained_model_name_or_path, modelFileName, true, options);
 
@@ -194,7 +305,7 @@ function validateInputs(session, inputs) {
  * NOTE: `inputs` must contain at least the input names of the model.
  *  - If additional inputs are passed, they will be ignored.
  *  - If inputs are missing, an error will be thrown.
- * 
+ *
  * @param {InferenceSession} session The InferenceSession object to run.
  * @param {Object} inputs An object that maps input names to input tensors.
  * @returns {Promise<Object>} A Promise that resolves to an object that maps output names to output tensors.
@@ -720,10 +831,10 @@ export class PreTrainedModel extends Callable {
 
     /**
      * Instantiate one of the model classes of the library from a pretrained model.
-     * 
+     *
      * The model class to instantiate is selected based on the `model_type` property of the config object
      * (either passed as an argument or loaded from `pretrained_model_name_or_path` if possible)
-     * 
+     *
      * @param {string} pretrained_model_name_or_path The name or path of the pretrained model. Can be either:
      * - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
      *   Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
@@ -757,14 +868,16 @@ export class PreTrainedModel extends Callable {
         const modelType = MODEL_TYPE_MAPPING.get(modelName);
 
         let info;
-        if (modelType === MODEL_TYPES.DecoderOnly) {
-            info = await Promise.all([
-                AutoConfig.from_pretrained(pretrained_model_name_or_path, options),
-                constructSession(pretrained_model_name_or_path, options.model_file_name ?? 'decoder_model_merged', options),
-                getModelJSON(pretrained_model_name_or_path, 'generation_config.json', false, options),
-            ]);
+        // FIXME: Uncomment this condition when generation_config.json file usage will be clear
+        // if (modelType === MODEL_TYPES.DecoderOnly) {
+        //     info = await Promise.all([
+        //         AutoConfig.from_pretrained(pretrained_model_name_or_path, options),
+        //         constructSession(pretrained_model_name_or_path, options.model_file_name ?? 'decoder_model_merged', options),
+        //         getModelJSON(pretrained_model_name_or_path, 'generation_config.json', false, options),
+        //     ]);
 
-        } else if (modelType === MODEL_TYPES.Seq2Seq || modelType === MODEL_TYPES.Vision2Seq) {
+        // } else
+        if (modelType === MODEL_TYPES.Seq2Seq || modelType === MODEL_TYPES.Vision2Seq) {
             info = await Promise.all([
                 AutoConfig.from_pretrained(pretrained_model_name_or_path, options),
                 constructSession(pretrained_model_name_or_path, 'encoder_model', options),
@@ -979,7 +1092,7 @@ export class PreTrainedModel extends Callable {
     /**
      * @typedef {{ sequences: Tensor, decoder_attentions: Tensor, cross_attentions: Tensor }} EncoderDecoderOutput
      * @typedef {Object} DecoderOutput
-     * 
+     *
      * Generates text based on the given inputs and generation configuration using the model.
      * @param {Tensor|Array|TypedArray} inputs An array of input token IDs.
      * @param {Object|GenerationConfig|null} generation_config The generation configuration to use. If null, default configuration will be used.
@@ -1068,7 +1181,7 @@ export class PreTrainedModel extends Callable {
         // @ts-ignore
         let beams = this.getStartBeams(inputs, generation_config, numOutputTokens, inputs_attention_mask);
 
-        while (beams.some(x => !x.done) && numOutputTokens < maxOutputTokens) {
+        while (beams.some(x => !x.done) && numOutputTokens < maxOutputTokens && !generation_config.abortSignal?.aborted) {
             let newest_beams = [];
             for (let beam of beams) {
                 if (beam.done) {
@@ -1165,7 +1278,7 @@ export class PreTrainedModel extends Callable {
             //   of list (one element for each generated token)
             //   of list (one element for each layer of the decoder)
             //   of torch.FloatTensor of shape (1, num_heads, generated_length, sequence_length)
-            // 
+            //
             // TODO: In future (when true parallelism, we should be able to return the correct shape)
 
             const decoder_attentions = getFlattened('decoder_attentions');
@@ -1184,9 +1297,9 @@ export class PreTrainedModel extends Callable {
 
     /**
      * Helper function to add attentions to beam
-     * @param {Object} beam 
+     * @param {Object} beam
      * @param {Object} output
-     * @private 
+     * @private
      */
     addAttentionsToBeam(beam, output) {
         if (this.config.is_encoder_decoder) {
@@ -3056,25 +3169,25 @@ export class CLIPPreTrainedModel extends PreTrainedModel { }
 
 /**
  * CLIP Text and Vision Model with a projection layers on top
- * 
+ *
  * **Example:** Perform zero-shot image classification with a `CLIPModel`.
- * 
+ *
  * ```javascript
  * import { AutoTokenizer, AutoProcessor, CLIPModel, RawImage } from '@xenova/transformers';
- * 
+ *
  * // Load tokenizer, processor, and model
  * let tokenizer = await AutoTokenizer.from_pretrained('Xenova/clip-vit-base-patch16');
  * let processor = await AutoProcessor.from_pretrained('Xenova/clip-vit-base-patch16');
  * let model = await CLIPModel.from_pretrained('Xenova/clip-vit-base-patch16');
- * 
+ *
  * // Run tokenization
  * let texts = ['a photo of a car', 'a photo of a football match']
  * let text_inputs = tokenizer(texts, { padding: true, truncation: true });
- * 
+ *
  * // Read image and run processor
  * let image = await RawImage.read('https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/football-match.jpg');
  * let image_inputs = await processor(image);
- * 
+ *
  * // Run model with both text and pixel inputs
  * let output = await model({ ...text_inputs, ...image_inputs });
  * // {
@@ -3101,20 +3214,20 @@ export class CLIPModel extends CLIPPreTrainedModel { }
 
 /**
  * CLIP Text Model with a projection layer on top (a linear layer on top of the pooled output)
- * 
+ *
  * **Example:** Compute text embeddings with `CLIPTextModelWithProjection`.
- * 
+ *
  * ```javascript
  * import { AutoTokenizer, CLIPTextModelWithProjection } from '@xenova/transformers';
- * 
+ *
  * // Load tokenizer and text model
  * const tokenizer = await AutoTokenizer.from_pretrained('Xenova/clip-vit-base-patch16');
  * const text_model = await CLIPTextModelWithProjection.from_pretrained('Xenova/clip-vit-base-patch16');
- * 
+ *
  * // Run tokenization
  * let texts = ['a photo of a car', 'a photo of a football match'];
  * let text_inputs = tokenizer(texts, { padding: true, truncation: true });
- * 
+ *
  * // Compute embeddings
  * const { text_embeds } = await text_model(text_inputs);
  * // Tensor {
@@ -3137,20 +3250,20 @@ export class CLIPTextModelWithProjection extends CLIPPreTrainedModel {
 
 /**
  * CLIP Vision Model with a projection layer on top (a linear layer on top of the pooled output)
- * 
+ *
  * **Example:** Compute vision embeddings with `CLIPVisionModelWithProjection`.
- * 
+ *
  * ```javascript
  * import { AutoProcessor, CLIPVisionModelWithProjection, RawImage} from '@xenova/transformers';
- * 
+ *
  * // Load processor and vision model
  * const processor = await AutoProcessor.from_pretrained('Xenova/clip-vit-base-patch16');
  * const vision_model = await CLIPVisionModelWithProjection.from_pretrained('Xenova/clip-vit-base-patch16');
- * 
+ *
  * // Read image and run processor
  * let image = await RawImage.read('https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/football-match.jpg');
  * let image_inputs = await processor(image);
- * 
+ *
  * // Compute embeddings
  * const { image_embeds } = await vision_model(image_inputs);
  * // Tensor {
@@ -4467,8 +4580,8 @@ export class MarianMTModel extends MarianPreTrainedModel {
      * Creates a new instance of the `MarianMTModel` class.
     * @param {Object} config The model configuration object.
     * @param {Object} session The ONNX session object.
-    * @param {any} decoder_merged_session 
-    * @param {any} generation_config 
+    * @param {any} decoder_merged_session
+    * @param {any} generation_config
     */
     constructor(config, session, decoder_merged_session, generation_config) {
         super(config, session);
@@ -4498,8 +4611,8 @@ export class M2M100ForConditionalGeneration extends M2M100PreTrainedModel {
      * Creates a new instance of the `M2M100ForConditionalGeneration` class.
     * @param {Object} config The model configuration object.
     * @param {Object} session The ONNX session object.
-    * @param {any} decoder_merged_session 
-    * @param {any} generation_config 
+    * @param {any} decoder_merged_session
+    * @param {any} generation_config
     */
     constructor(config, session, decoder_merged_session, generation_config) {
         super(config, session);
@@ -4529,12 +4642,12 @@ export class Wav2Vec2PreTrainedModel extends PreTrainedModel { };
  * 
  * ```javascript
  * import { AutoProcessor, AutoModel, read_audio } from '@xenova/transformers';
- * 
+ *
  * // Read and preprocess audio
  * const processor = await AutoProcessor.from_pretrained('Xenova/mms-300m');
  * const audio = await read_audio('https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac', 16000);
  * const inputs = await processor(audio);
- * 
+ *
  * // Run model with inputs
  * const model = await AutoModel.from_pretrained('Xenova/mms-300m');
  * const output = await model(inputs);
@@ -4790,12 +4903,12 @@ export class WavLMPreTrainedModel extends PreTrainedModel { };
  * 
  * ```javascript
  * import { AutoProcessor, AutoModel, read_audio } from '@xenova/transformers';
- * 
+ *
  * // Read and preprocess audio
  * const processor = await AutoProcessor.from_pretrained('Xenova/wavlm-base');
  * const audio = await read_audio('https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav', 16000);
  * const inputs = await processor(audio);
- * 
+ *
  * // Run model with inputs
  * const model = await AutoModel.from_pretrained('Xenova/wavlm-base');
  * const output = await model(inputs);
@@ -5427,7 +5540,7 @@ export class PretrainedMixin {
     static MODEL_CLASS_MAPPINGS = null;
 
     /**
-     * Whether to attempt to instantiate the base class (`PretrainedModel`) if 
+     * Whether to attempt to instantiate the base class (`PretrainedModel`) if
      * the model type is not found in the mapping.
      */
     static BASE_IF_FAIL = false;
@@ -5832,7 +5945,7 @@ for (const [name, model, type] of CUSTOM_MAPPING) {
 /**
  * Helper class which is used to instantiate pretrained models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModel.from_pretrained('bert-base-uncased');
  */
@@ -5846,7 +5959,7 @@ export class AutoModel extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained sequence classification models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForSequenceClassification.from_pretrained('distilbert-base-uncased-finetuned-sst-2-english');
  */
@@ -5857,7 +5970,7 @@ export class AutoModelForSequenceClassification extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained token classification models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForTokenClassification.from_pretrained('Davlan/distilbert-base-multilingual-cased-ner-hrl');
  */
@@ -5868,7 +5981,7 @@ export class AutoModelForTokenClassification extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained sequence-to-sequence models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForSeq2SeqLM.from_pretrained('t5-small');
  */
@@ -5912,7 +6025,7 @@ export class AutoModelForTextToWaveform extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained causal language models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForCausalLM.from_pretrained('gpt2');
  */
@@ -5923,7 +6036,7 @@ export class AutoModelForCausalLM extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained masked language models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForMaskedLM.from_pretrained('bert-base-uncased');
  */
@@ -5934,7 +6047,7 @@ export class AutoModelForMaskedLM extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained question answering models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForQuestionAnswering.from_pretrained('distilbert-base-cased-distilled-squad');
  */
@@ -5945,7 +6058,7 @@ export class AutoModelForQuestionAnswering extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained vision-to-sequence models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForVision2Seq.from_pretrained('nlpconnect/vit-gpt2-image-captioning');
  */
@@ -5956,7 +6069,7 @@ export class AutoModelForVision2Seq extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained image classification models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForImageClassification.from_pretrained('google/vit-base-patch16-224');
  */
@@ -5967,7 +6080,7 @@ export class AutoModelForImageClassification extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained image segmentation models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForImageSegmentation.from_pretrained('facebook/detr-resnet-50-panoptic');
  */
@@ -5989,7 +6102,7 @@ export class AutoModelForSemanticSegmentation extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained object detection models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForObjectDetection.from_pretrained('facebook/detr-resnet-50');
  */
@@ -6005,7 +6118,7 @@ export class AutoModelForZeroShotObjectDetection extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained mask generation models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForMaskGeneration.from_pretrained('Xenova/sam-vit-base');
  */
