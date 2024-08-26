@@ -1,16 +1,15 @@
-const CACHE_DIR = 'C:\\Temp\\models\\';
+const CACHE_DIR = 'C:\\Temp\\models1\\';
 
 main();
 
 async function main() {
   const { pipeline, env } = await import('transformers.js');
   env.cacheDir = CACHE_DIR;
+  // env.useFSCache = true;
   const classificator = await pipeline(
     'image-classification',
     'Charles95/openvino_resnet50',
     {
-      'cache_dir': CACHE_DIR,
-      // 'local_files_only': true,
       'progress_callback': ({ status, name, file, progress, loaded, total }) => {
         if (!progress) return;
 

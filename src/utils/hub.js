@@ -493,6 +493,15 @@ export async function getModelFile(path_or_repo_id, filename, fatal = true, opti
             && typeof Response !== 'undefined' // 2. `Response` is defined (i.e., we are in a browser-like environment)
             && response instanceof Response    // 3. result is a `Response` object (i.e., not a `FileResponse`)
             && response.status === 200         // 4. request was successful (status code 200)
+
+            // Only cache the response if:
+        toCacheResponse =
+            cache                              // 1. A caching system is available
+            && typeof Response !== 'undefined' // 2. `Response` is defined (i.e., we are in a browser-like environment)
+            // && response instanceof Response    // 3. result is a `Response` object (i.e., not a `FileResponse`)
+            && response.status === 200         // 4. request was successful (status code 200)
+
+        // toCacheResponse = true;
     }
 
     // Start downloading
@@ -617,36 +626,77 @@ async function readResponse(response, progress_callback) {
         reject = rej;
     });
 
-    response.body.on('data', async (chunk) => {
-        let newLoaded = loaded + chunk.length;
-        if (newLoaded > total) {
-            total = newLoaded;
+    if (typeof response.body.on !== 'function') {
+        const reader = response.body.getReader();
+        console.log('here');
 
-            // Adding the new data will overflow buffer.
-            // In this case, we extend the buffer
-            let newBuffer = new Uint8Array(total);
+        async function read() {
+            const { done, value } = await reader.read();
+            if (done) return;
 
-            // copy contents
-            newBuffer.set(buffer);
+            let newLoaded = loaded + value.length;
+            if (newLoaded > total) {
+                total = newLoaded;
 
-            buffer = newBuffer;
+                // Adding the new data will overflow buffer.
+                // In this case, we extend the buffer
+                let newBuffer = new Uint8Array(total);
+
+                // copy contents
+                newBuffer.set(buffer);
+
+                buffer = newBuffer;
+            }
+            buffer.set(value, loaded)
+            loaded = newLoaded;
+
+            const progress = (loaded / total) * 100;
+
+            // Call your function here
+            progress_callback({
+                progress: progress,
+                loaded: loaded,
+                total: total,
+            })
+
+            return read();
         }
-        buffer.set(chunk, loaded)
-        loaded = newLoaded;
 
-        const progress = (loaded / total) * 100;
-
-        // Call your function here
-        progress_callback({
-            progress: progress,
-            loaded: loaded,
-            total: total,
-        });
-    });
-
-    response.body.on('end', async () => {
+        // Actually read
+        await read();
         resolve(buffer);
-    });
+    } else {
+        response.body.on('data', async (chunk) => {
+            let newLoaded = loaded + chunk.length;
+            if (newLoaded > total) {
+                total = newLoaded;
+
+                // Adding the new data will overflow buffer.
+                // In this case, we extend the buffer
+                let newBuffer = new Uint8Array(total);
+
+                // copy contents
+                newBuffer.set(buffer);
+
+                buffer = newBuffer;
+            }
+            buffer.set(chunk, loaded)
+            loaded = newLoaded;
+
+            const progress = (loaded / total) * 100;
+
+            // Call your function here
+            progress_callback({
+                progress: progress,
+                loaded: loaded,
+                total: total,
+            });
+        });
+
+        response.body.on('end', async () => {
+            resolve(buffer);
+        });
+    }
 
     return p;
 }
