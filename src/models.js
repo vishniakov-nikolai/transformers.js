@@ -1,9 +1,9 @@
 
 /**
  * @file Definitions of all models available in Transformers.js.
- * 
+ *
  * **Example:** Load and run an `AutoModel`.
- * 
+ *
  * ```javascript
  * import { AutoModel, AutoTokenizer } from '@xenova/transformers';
  *
@@ -19,13 +19,13 @@
  * //     size: 183132,
  * // }
  * ```
- * 
+ *
  * We also provide other `AutoModel`s (listed below), which you can use in the same way as the Python library. For example:
- * 
+ *
  * **Example:** Load and run an `AutoModelForSeq2SeqLM`.
  * ```javascript
  * import { AutoModelForSeq2SeqLM, AutoTokenizer } from '@xenova/transformers';
- * 
+ *
  * let tokenizer = await AutoTokenizer.from_pretrained('Xenova/t5-small');
  * let model = await AutoModelForSeq2SeqLM.from_pretrained('Xenova/t5-small');
  *
@@ -34,7 +34,7 @@
  * let decoded = tokenizer.decode(outputs[0], { skip_special_tokens: true });
  * // 'Ich liebe Transformatoren!'
  * ```
- * 
+ *
  * @module models
  */
 
@@ -50,7 +50,6 @@ import {
 } from './utils/core.js';
 
 import {
-    getModelFile,
     getModelJSON,
 } from './utils/hub.js';
 
@@ -81,9 +80,9 @@ import {
     Tensor,
 } from './utils/tensor.js';
 
-import { executionProviders, ONNX } from './backends/onnx.js';
+import backends from './backends/index.js';
 import { medianFilter } from './transformers.js';
-const { InferenceSession, Tensor: ONNXTensor, env } = ONNX;
+const { InferenceSession, Tensor: ONNXTensor, env } = backends.ONNX.ONNX;
 
 /** @typedef {import('onnxruntime-web').InferenceSession} InferenceSession */
 
@@ -119,28 +118,18 @@ const MODEL_CLASS_TO_NAME_MAPPING = new Map();
  */
 async function constructSession(pretrained_model_name_or_path, fileName, options) {
     // TODO add option for user to force specify their desired execution provider
-    let modelFileName = `onnx/${fileName}${options.quantized ? '_quantized' : ''}.onnx`;
-    let buffer = await getModelFile(pretrained_model_name_or_path, modelFileName, true, options);
+    let InferenceLib = null;
 
-    try {
-        return await InferenceSession.create(buffer, {
-            executionProviders,
-        });
-    } catch (err) {
-        // If the execution provided was only wasm, throw the error
-        if (executionProviders.length === 1 && executionProviders[0] === 'wasm') {
-            throw err;
-        }
+    if (Array.isArray(fileName) || /\.xml$/.test(fileName)) {
+        console.log('OVModel model passed, openvinojs-node is using');
+        InferenceLib = backends.OpenVINO;
+    } else InferenceLib = backends.ONNX;
 
-        console.warn(err);
-        console.warn(
-            'Something went wrong during model construction (most likely a missing operation). ' +
-            'Using `wasm` as a fallback. '
-        )
-        return await InferenceSession.create(buffer, {
-            executionProviders: ['wasm']
-        });
-    }
+    return await InferenceLib.create(
+        pretrained_model_name_or_path,
+        fileName,
+        options,
+    );
 }
 
 /**
@@ -194,7 +183,7 @@ function validateInputs(session, inputs) {
  * NOTE: `inputs` must contain at least the input names of the model.
  *  - If additional inputs are passed, they will be ignored.
  *  - If inputs are missing, an error will be thrown.
- * 
+ *
  * @param {InferenceSession} session The InferenceSession object to run.
  * @param {Object} inputs An object that maps input names to input tensors.
  * @returns {Promise<Object>} A Promise that resolves to an object that maps output names to output tensors.
@@ -720,17 +709,17 @@ export class PreTrainedModel extends Callable {
 
     /**
      * Instantiate one of the model classes of the library from a pretrained model.
-     * 
+     *
      * The model class to instantiate is selected based on the `model_type` property of the config object
      * (either passed as an argument or loaded from `pretrained_model_name_or_path` if possible)
-     * 
+     *
      * @param {string} pretrained_model_name_or_path The name or path of the pretrained model. Can be either:
      * - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
      *   Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
      *   user or organization name, like `dbmdz/bert-base-german-cased`.
      * - A path to a *directory* containing model weights, e.g., `./my_model_directory/`.
      * @param {import('./utils/hub.js').PretrainedOptions} options Additional options for loading the model.
-     * 
+     *
      * @returns {Promise<PreTrainedModel>} A new instance of the `PreTrainedModel` class.
      */
     static async from_pretrained(pretrained_model_name_or_path, {
@@ -741,6 +730,8 @@ export class PreTrainedModel extends Callable {
         local_files_only = false,
         revision = 'main',
         model_file_name = null,
+        device,
+        inferenceCallback,
     } = {}) {
 
         let options = {
@@ -751,6 +742,8 @@ export class PreTrainedModel extends Callable {
             local_files_only,
             revision,
             model_file_name,
+            device,
+            inferenceCallback,
         }
 
         const modelName = MODEL_CLASS_TO_NAME_MAPPING.get(this);
@@ -821,7 +814,7 @@ export class PreTrainedModel extends Callable {
     }
 
     /**
-     * @param {import('./utils/generation.js').GenerationConfigType} generation_config 
+     * @param {import('./utils/generation.js').GenerationConfigType} generation_config
      * @param {number} input_ids_seq_length The starting sequence length for the input ids.
      * @returns {LogitsProcessorList}
      * @private
@@ -979,7 +972,7 @@ export class PreTrainedModel extends Callable {
     /**
      * @typedef {{ sequences: Tensor, decoder_attentions: Tensor, cross_attentions: Tensor }} EncoderDecoderOutput
      * @typedef {Object} DecoderOutput
-     * 
+     *
      * Generates text based on the given inputs and generation configuration using the model.
      * @param {Tensor|Array|TypedArray} inputs An array of input token IDs.
      * @param {Object|GenerationConfig|null} generation_config The generation configuration to use. If null, default configuration will be used.
@@ -1165,7 +1158,7 @@ export class PreTrainedModel extends Callable {
             //   of list (one element for each generated token)
             //   of list (one element for each layer of the decoder)
             //   of torch.FloatTensor of shape (1, num_heads, generated_length, sequence_length)
-            // 
+            //
             // TODO: In future (when true parallelism, we should be able to return the correct shape)
 
             const decoder_attentions = getFlattened('decoder_attentions');
@@ -1184,9 +1177,9 @@ export class PreTrainedModel extends Callable {
 
     /**
      * Helper function to add attentions to beam
-     * @param {Object} beam 
+     * @param {Object} beam
      * @param {Object} output
-     * @private 
+     * @private
      */
     addAttentionsToBeam(beam, output) {
         if (this.config.is_encoder_decoder) {
@@ -3056,25 +3049,25 @@ export class CLIPPreTrainedModel extends PreTrainedModel { }
 
 /**
  * CLIP Text and Vision Model with a projection layers on top
- * 
+ *
  * **Example:** Perform zero-shot image classification with a `CLIPModel`.
- * 
+ *
  * ```javascript
  * import { AutoTokenizer, AutoProcessor, CLIPModel, RawImage } from '@xenova/transformers';
- * 
+ *
  * // Load tokenizer, processor, and model
  * let tokenizer = await AutoTokenizer.from_pretrained('Xenova/clip-vit-base-patch16');
  * let processor = await AutoProcessor.from_pretrained('Xenova/clip-vit-base-patch16');
  * let model = await CLIPModel.from_pretrained('Xenova/clip-vit-base-patch16');
- * 
+ *
  * // Run tokenization
  * let texts = ['a photo of a car', 'a photo of a football match']
  * let text_inputs = tokenizer(texts, { padding: true, truncation: true });
- * 
+ *
  * // Read image and run processor
  * let image = await RawImage.read('https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/football-match.jpg');
  * let image_inputs = await processor(image);
- * 
+ *
  * // Run model with both text and pixel inputs
  * let output = await model({ ...text_inputs, ...image_inputs });
  * // {
@@ -3113,20 +3106,20 @@ export class CLIPTextModel extends CLIPPreTrainedModel {
 
 /**
  * CLIP Text Model with a projection layer on top (a linear layer on top of the pooled output)
- * 
+ *
  * **Example:** Compute text embeddings with `CLIPTextModelWithProjection`.
- * 
+ *
  * ```javascript
  * import { AutoTokenizer, CLIPTextModelWithProjection } from '@xenova/transformers';
- * 
+ *
  * // Load tokenizer and text model
  * const tokenizer = await AutoTokenizer.from_pretrained('Xenova/clip-vit-base-patch16');
  * const text_model = await CLIPTextModelWithProjection.from_pretrained('Xenova/clip-vit-base-patch16');
- * 
+ *
  * // Run tokenization
  * let texts = ['a photo of a car', 'a photo of a football match'];
  * let text_inputs = tokenizer(texts, { padding: true, truncation: true });
- * 
+ *
  * // Compute embeddings
  * const { text_embeds } = await text_model(text_inputs);
  * // Tensor {
@@ -3160,20 +3153,20 @@ export class CLIPVisionModel extends CLIPPreTrainedModel {
 
 /**
  * CLIP Vision Model with a projection layer on top (a linear layer on top of the pooled output)
- * 
+ *
  * **Example:** Compute vision embeddings with `CLIPVisionModelWithProjection`.
- * 
+ *
  * ```javascript
  * import { AutoProcessor, CLIPVisionModelWithProjection, RawImage} from '@xenova/transformers';
- * 
+ *
  * // Load processor and vision model
  * const processor = await AutoProcessor.from_pretrained('Xenova/clip-vit-base-patch16');
  * const vision_model = await CLIPVisionModelWithProjection.from_pretrained('Xenova/clip-vit-base-patch16');
- * 
+ *
  * // Read image and run processor
  * let image = await RawImage.read('https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/football-match.jpg');
  * let image_inputs = await processor(image);
- * 
+ *
  * // Compute embeddings
  * const { image_embeds } = await vision_model(image_inputs);
  * // Tensor {
@@ -3201,25 +3194,25 @@ export class SiglipPreTrainedModel extends PreTrainedModel { }
 
 /**
  * SigLIP Text and Vision Model with a projection layers on top
- * 
+ *
  * **Example:** Perform zero-shot image classification with a `SiglipModel`.
- * 
+ *
  * ```javascript
  * import { AutoTokenizer, AutoProcessor, SiglipModel, RawImage } from '@xenova/transformers';
- * 
+ *
  * // Load tokenizer, processor, and model
  * const tokenizer = await AutoTokenizer.from_pretrained('Xenova/siglip-base-patch16-224');
  * const processor = await AutoProcessor.from_pretrained('Xenova/siglip-base-patch16-224');
  * const model = await SiglipModel.from_pretrained('Xenova/siglip-base-patch16-224');
- * 
+ *
  * // Run tokenization
  * const texts = ['a photo of 2 cats', 'a photo of 2 dogs'];
  * const text_inputs = tokenizer(texts, { padding: 'max_length', truncation: true });
- * 
+ *
  * // Read image and run processor
  * const image = await RawImage.read('http://images.cocodataset.org/val2017/000000039769.jpg');
  * const image_inputs = await processor(image);
- * 
+ *
  * // Run model with both text and pixel inputs
  * const output = await model({ ...text_inputs, ...image_inputs });
  * // {
@@ -3246,20 +3239,20 @@ export class SiglipModel extends SiglipPreTrainedModel { }
 
 /**
  * The text model from SigLIP without any head or projection on top.
- * 
+ *
  * **Example:** Compute text embeddings with `SiglipTextModel`.
- * 
+ *
  * ```javascript
  * import { AutoTokenizer, SiglipTextModel } from '@xenova/transformers';
- * 
+ *
  * // Load tokenizer and text model
  * const tokenizer = await AutoTokenizer.from_pretrained('Xenova/siglip-base-patch16-224');
  * const text_model = await SiglipTextModel.from_pretrained('Xenova/siglip-base-patch16-224');
- * 
+ *
  * // Run tokenization
  * const texts = ['a photo of 2 cats', 'a photo of 2 dogs'];
  * const text_inputs = tokenizer(texts, { padding: 'max_length', truncation: true });
- * 
+ *
  * // Compute embeddings
  * const { pooler_output } = await text_model(text_inputs);
  * // Tensor {
@@ -3282,20 +3275,20 @@ export class SiglipTextModel extends SiglipPreTrainedModel {
 
 /**
  * The vision model from SigLIP without any head or projection on top.
- * 
+ *
  * **Example:** Compute vision embeddings with `SiglipVisionModel`.
- * 
+ *
  * ```javascript
  * import { AutoProcessor, SiglipVisionModel, RawImage} from '@xenova/transformers';
- * 
+ *
  * // Load processor and vision model
  * const processor = await AutoProcessor.from_pretrained('Xenova/siglip-base-patch16-224');
  * const vision_model = await SiglipVisionModel.from_pretrained('Xenova/siglip-base-patch16-224');
- * 
+ *
  * // Read image and run processor
  * const image = await RawImage.read('https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/football-match.jpg');
  * const image_inputs = await processor(image);
- * 
+ *
  * // Compute embeddings
  * const { pooler_output } = await vision_model(image_inputs);
  * // Tensor {
@@ -3330,25 +3323,25 @@ export class CLIPSegModel extends CLIPSegPreTrainedModel { }
 
 /**
  * CLIPSeg model with a Transformer-based decoder on top for zero-shot and one-shot image segmentation.
- * 
+ *
  * **Example:** Perform zero-shot image segmentation with a `CLIPSegForImageSegmentation` model.
- * 
+ *
  * ```javascript
  * import { AutoTokenizer, AutoProcessor, CLIPSegForImageSegmentation, RawImage } from '@xenova/transformers';
- * 
+ *
  * // Load tokenizer, processor, and model
  * const tokenizer = await AutoTokenizer.from_pretrained('Xenova/clipseg-rd64-refined');
  * const processor = await AutoProcessor.from_pretrained('Xenova/clipseg-rd64-refined');
  * const model = await CLIPSegForImageSegmentation.from_pretrained('Xenova/clipseg-rd64-refined');
- * 
+ *
  * // Run tokenization
  * const texts = ['a glass', 'something to fill', 'wood', 'a jar'];
  * const text_inputs = tokenizer(texts, { padding: true, truncation: true });
- * 
+ *
  * // Read image and run processor
  * const image = await RawImage.read('https://github.com/timojl/clipseg/blob/master/example_image.jpg?raw=true');
  * const image_inputs = await processor(image);
- * 
+ *
  * // Run model with both text and pixel inputs
  * const { logits } = await model({ ...text_inputs, ...image_inputs });
  * // logits: Tensor {
@@ -3358,7 +3351,7 @@ export class CLIPSegModel extends CLIPSegPreTrainedModel { }
  * //   size: 495616
  * // }
  * ```
- * 
+ *
  * You can visualize the predictions as follows:
  * ```javascript
  * const preds = logits
@@ -3367,7 +3360,7 @@ export class CLIPSegModel extends CLIPSegPreTrainedModel { }
  *   .mul_(255)
  *   .round_()
  *   .to('uint8');
- * 
+ *
  * for (let i = 0; i < preds.dims[0]; ++i) {
  *   const img = RawImage.fromTensor(preds[i]);
  *   img.save(`prediction_${i}.png`);
@@ -3785,22 +3778,22 @@ export class VitMattePreTrainedModel extends PreTrainedModel { }
 
 /**
  * ViTMatte framework leveraging any vision backbone e.g. for ADE20k, CityScapes.
- * 
+ *
  * **Example:** Perform image matting with a `VitMatteForImageMatting` model.
  * ```javascript
  * import { AutoProcessor, VitMatteForImageMatting, RawImage } from '@xenova/transformers';
- * 
+ *
  * // Load processor and model
  * const processor = await AutoProcessor.from_pretrained('Xenova/vitmatte-small-distinctions-646');
  * const model = await VitMatteForImageMatting.from_pretrained('Xenova/vitmatte-small-distinctions-646');
- * 
+ *
  * // Load image and trimap
  * const image = await RawImage.fromURL('https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/vitmatte_image.png');
  * const trimap = await RawImage.fromURL('https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/vitmatte_trimap.png');
- * 
+ *
  * // Prepare image + trimap for the model
  * const inputs = await processor(image, trimap);
- * 
+ *
  * // Predict alpha matte
  * const { alphas } = await model(inputs);
  * // Tensor {
@@ -3810,14 +3803,14 @@ export class VitMattePreTrainedModel extends PreTrainedModel { }
  * //   data: Float32Array(614400) [ 0.9894027709960938, 0.9970508813858032, ... ]
  * // }
  * ```
- * 
+ *
  * You can visualize the alpha matte as follows:
  * ```javascript
  * import { Tensor, cat } from '@xenova/transformers';
- * 
+ *
  * // Visualize predicted alpha matte
  * const imageTensor = image.toTensor();
- * 
+ *
  * // Convert float (0-1) alpha matte to uint8 (0-255)
  * const alphaChannel = alphas
  *   .squeeze(0)
@@ -3825,10 +3818,10 @@ export class VitMattePreTrainedModel extends PreTrainedModel { }
  *   .clamp_(0, 255)
  *   .round_()
  *   .to('uint8');
- * 
+ *
  * // Concatenate original image with predicted alpha
  * const imageData = cat([imageTensor, alphaChannel], 0);
- * 
+ *
  * // Save output image
  * const outputImage = RawImage.fromTensor(imageData);
  * outputImage.save('output.png');
@@ -4041,25 +4034,25 @@ export class Swin2SRModel extends Swin2SRPreTrainedModel { }
 
 /**
  * Swin2SR Model transformer with an upsampler head on top for image super resolution and restoration.
- * 
+ *
  * **Example:** Super-resolution w/ `Xenova/swin2SR-classical-sr-x2-64`.
- * 
+ *
  * ```javascript
  * import { AutoProcessor, Swin2SRForImageSuperResolution, RawImage } from '@xenova/transformers';
- * 
+ *
  * // Load processor and model
  * const model_id = 'Xenova/swin2SR-classical-sr-x2-64';
  * const processor = await AutoProcessor.from_pretrained(model_id);
  * const model = await Swin2SRForImageSuperResolution.from_pretrained(model_id);
- * 
+ *
  * // Prepare model inputs
  * const url = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/butterfly.jpg';
  * const image = await RawImage.fromURL(url);
  * const inputs = await processor(image);
- * 
+ *
  * // Run model
  * const outputs = await model(inputs);
- * 
+ *
  * // Convert Tensor to RawImage
  * const output = outputs.reconstruction.squeeze().clamp_(0, 1).mul_(255).round_().to('uint8');
  * const outputImage = RawImage.fromTensor(output);
@@ -4084,29 +4077,29 @@ export class DPTModel extends DPTPreTrainedModel { }
 
 /**
  * DPT Model with a depth estimation head on top (consisting of 3 convolutional layers) e.g. for KITTI, NYUv2.
- * 
+ *
  * **Example:** Depth estimation w/ `Xenova/dpt-hybrid-midas`.
  * ```javascript
  * import { DPTForDepthEstimation, AutoProcessor, RawImage, interpolate, max } from '@xenova/transformers';
- * 
+ *
  * // Load model and processor
  * const model_id = 'Xenova/dpt-hybrid-midas';
  * const model = await DPTForDepthEstimation.from_pretrained(model_id);
  * const processor = await AutoProcessor.from_pretrained(model_id);
- * 
+ *
  * // Load image from URL
  * const url = 'http://images.cocodataset.org/val2017/000000039769.jpg';
  * const image = await RawImage.fromURL(url);
- * 
+ *
  * // Prepare image for the model
  * const inputs = await processor(image);
- * 
+ *
  * // Run model
  * const { predicted_depth } = await model(inputs);
- * 
+ *
  * // Interpolate to original size
  * const prediction = interpolate(predicted_depth, image.size.reverse(), 'bilinear', false);
- * 
+ *
  * // Visualize the prediction
  * const formatted = prediction.mul_(255 / max(prediction.data)[0]).to('uint8');
  * const depth = RawImage.fromTensor(formatted);
@@ -4141,29 +4134,29 @@ export class GLPNModel extends GLPNPreTrainedModel { }
 
 /**
  * GLPN Model transformer with a lightweight depth estimation head on top e.g. for KITTI, NYUv2.
- * 
+ *
  * **Example:** Depth estimation w/ `Xenova/glpn-kitti`.
  * ```javascript
  * import { GLPNForDepthEstimation, AutoProcessor, RawImage, interpolate, max } from '@xenova/transformers';
- * 
+ *
  * // Load model and processor
  * const model_id = 'Xenova/glpn-kitti';
  * const model = await GLPNForDepthEstimation.from_pretrained(model_id);
  * const processor = await AutoProcessor.from_pretrained(model_id);
- * 
+ *
  * // Load image from URL
  * const url = 'http://images.cocodataset.org/val2017/000000039769.jpg';
  * const image = await RawImage.fromURL(url);
- * 
+ *
  * // Prepare image for the model
  * const inputs = await processor(image);
- * 
+ *
  * // Run model
  * const { predicted_depth } = await model(inputs);
- * 
+ *
  * // Interpolate to original size
  * const prediction = interpolate(predicted_depth, image.size.reverse(), 'bilinear', false);
- * 
+ *
  * // Visualize the prediction
  * const formatted = prediction.mul_(255 / max(prediction.data)[0]).to('uint8');
  * const depth = RawImage.fromTensor(formatted);
@@ -4183,56 +4176,56 @@ export class DonutSwinPreTrainedModel extends PreTrainedModel { }
 
 /**
  * The bare Donut Swin Model transformer outputting raw hidden-states without any specific head on top.
- * 
+ *
  * **Example:** Step-by-step Document Parsing.
- * 
+ *
  * ```javascript
  * import { AutoProcessor, AutoTokenizer, AutoModelForVision2Seq, RawImage } from '@xenova/transformers';
- * 
+ *
  * // Choose model to use
  * const model_id = 'Xenova/donut-base-finetuned-cord-v2';
- * 
+ *
  * // Prepare image inputs
  * const processor = await AutoProcessor.from_pretrained(model_id);
  * const url = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/receipt.png';
  * const image = await RawImage.read(url);
  * const image_inputs = await processor(image);
- * 
+ *
  * // Prepare decoder inputs
  * const tokenizer = await AutoTokenizer.from_pretrained(model_id);
  * const task_prompt = '<s_cord-v2>';
  * const decoder_input_ids = tokenizer(task_prompt, {
  *   add_special_tokens: false,
  * }).input_ids;
- * 
+ *
  * // Create the model
  * const model = await AutoModelForVision2Seq.from_pretrained(model_id);
- * 
+ *
  * // Run inference
  * const output = await model.generate(image_inputs.pixel_values, {
  *   decoder_input_ids,
  *   max_length: model.config.decoder.max_position_embeddings,
  * });
- * 
+ *
  * // Decode output
  * const decoded = tokenizer.batch_decode(output)[0];
  * // <s_cord-v2><s_menu><s_nm> CINNAMON SUGAR</s_nm><s_unitprice> 17,000</s_unitprice><s_cnt> 1 x</s_cnt><s_price> 17,000</s_price></s_menu><s_sub_total><s_subtotal_price> 17,000</s_subtotal_price></s_sub_total><s_total><s_total_price> 17,000</s_total_price><s_cashprice> 20,000</s_cashprice><s_changeprice> 3,000</s_changeprice></s_total></s>
  * ```
- * 
+ *
  * **Example:** Step-by-step Document Visual Question Answering (DocVQA)
- * 
+ *
  * ```javascript
  * import { AutoProcessor, AutoTokenizer, AutoModelForVision2Seq, RawImage } from '@xenova/transformers';
- * 
+ *
  * // Choose model to use
  * const model_id = 'Xenova/donut-base-finetuned-docvqa';
- * 
+ *
  * // Prepare image inputs
  * const processor = await AutoProcessor.from_pretrained(model_id);
  * const url = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/invoice.png';
  * const image = await RawImage.read(url);
  * const image_inputs = await processor(image);
- * 
+ *
  * // Prepare decoder inputs
  * const tokenizer = await AutoTokenizer.from_pretrained(model_id);
  * const question = 'What is the invoice number?';
@@ -4240,16 +4233,16 @@ export class DonutSwinPreTrainedModel extends PreTrainedModel { }
  * const decoder_input_ids = tokenizer(task_prompt, {
  *   add_special_tokens: false,
  * }).input_ids;
- * 
+ *
  * // Create the model
  * const model = await AutoModelForVision2Seq.from_pretrained(model_id);
- * 
+ *
  * // Run inference
  * const output = await model.generate(image_inputs.pixel_values, {
  *   decoder_input_ids,
  *   max_length: model.config.decoder.max_position_embeddings,
  * });
- * 
+ *
  * // Decode output
  * const decoded = tokenizer.batch_decode(output)[0];
  * // <s_docvqa><s_question> What is the invoice number?</s_question><s_answer> us-001</s_answer></s>
@@ -4358,21 +4351,21 @@ export class SamPreTrainedModel extends PreTrainedModel { }
 /**
  * Segment Anything Model (SAM) for generating segmentation masks, given an input image
  * and optional 2D location and bounding boxes.
- * 
+ *
  * **Example:** Perform mask generation w/ `Xenova/sam-vit-base`.
  * ```javascript
  * import { SamModel, AutoProcessor, RawImage } from '@xenova/transformers';
- * 
+ *
  * const model = await SamModel.from_pretrained('Xenova/sam-vit-base');
  * const processor = await AutoProcessor.from_pretrained('Xenova/sam-vit-base');
- * 
+ *
  * const img_url = 'https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png';
  * const raw_image = await RawImage.read(img_url);
  * const input_points = [[[450, 600]]] // 2D localization of a window
- * 
+ *
  * const inputs = await processor(raw_image, input_points);
  * const outputs = await model(inputs);
- * 
+ *
  * const masks = await processor.post_process_masks(outputs.pred_masks, inputs.original_sizes, inputs.reshaped_input_sizes);
  * // [
  * //   Tensor {
@@ -4416,7 +4409,7 @@ export class SamModel extends SamPreTrainedModel {
     async get_image_embeddings({ pixel_values }) {
         // in:
         //  - pixel_values: tensor.float32[batch_size,3,1024,1024]
-        // 
+        //
         // out:
         //  - image_embeddings: tensor.float32[batch_size,256,64,64]
         //  - image_positional_embeddings: tensor.float32[batch_size,256,64,64]
@@ -4515,8 +4508,8 @@ export class MarianMTModel extends MarianPreTrainedModel {
      * Creates a new instance of the `MarianMTModel` class.
     * @param {Object} config The model configuration object.
     * @param {Object} session The ONNX session object.
-    * @param {any} decoder_merged_session 
-    * @param {any} generation_config 
+    * @param {any} decoder_merged_session
+    * @param {any} generation_config
     */
     constructor(config, session, decoder_merged_session, generation_config) {
         super(config, session);
@@ -4546,8 +4539,8 @@ export class M2M100ForConditionalGeneration extends M2M100PreTrainedModel {
      * Creates a new instance of the `M2M100ForConditionalGeneration` class.
     * @param {Object} config The model configuration object.
     * @param {Object} session The ONNX session object.
-    * @param {any} decoder_merged_session 
-    * @param {any} generation_config 
+    * @param {any} decoder_merged_session
+    * @param {any} generation_config
     */
     constructor(config, session, decoder_merged_session, generation_config) {
         super(config, session);
@@ -4572,17 +4565,17 @@ export class Wav2Vec2PreTrainedModel extends PreTrainedModel { };
 
 /**
  * The bare Wav2Vec2 Model transformer outputting raw hidden-states without any specific head on top.
- * 
+ *
  * **Example:** Load and run a `Wav2Vec2Model` for feature extraction.
- * 
+ *
  * ```javascript
  * import { AutoProcessor, AutoModel, read_audio } from '@xenova/transformers';
- * 
+ *
  * // Read and preprocess audio
  * const processor = await AutoProcessor.from_pretrained('Xenova/mms-300m');
  * const audio = await read_audio('https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac', 16000);
  * const inputs = await processor(audio);
- * 
+ *
  * // Run model with inputs
  * const model = await AutoModel.from_pretrained('Xenova/mms-300m');
  * const output = await model(inputs);
@@ -4769,17 +4762,17 @@ export class HubertPreTrainedModel extends PreTrainedModel { }
 
 /**
  * The bare Hubert Model transformer outputting raw hidden-states without any specific head on top.
- * 
+ *
  * **Example:** Load and run a `HubertModel` for feature extraction.
- * 
+ *
  * ```javascript
  * import { AutoProcessor, AutoModel, read_audio } from '@xenova/transformers';
- * 
+ *
  * // Read and preprocess audio
  * const processor = await AutoProcessor.from_pretrained('Xenova/hubert-base-ls960');
  * const audio = await read_audio('https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav', 16000);
  * const inputs = await processor(audio);
- * 
+ *
  * // Load and run model with inputs
  * const model = await AutoModel.from_pretrained('Xenova/hubert-base-ls960');
  * const output = await model(inputs);
@@ -4833,17 +4826,17 @@ export class WavLMPreTrainedModel extends PreTrainedModel { };
 
 /**
  * The bare WavLM Model transformer outputting raw hidden-states without any specific head on top.
- * 
+ *
  * **Example:** Load and run a `WavLMModel` for feature extraction.
- * 
+ *
  * ```javascript
  * import { AutoProcessor, AutoModel, read_audio } from '@xenova/transformers';
- * 
+ *
  * // Read and preprocess audio
  * const processor = await AutoProcessor.from_pretrained('Xenova/wavlm-base');
  * const audio = await read_audio('https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav', 16000);
  * const inputs = await processor(audio);
- * 
+ *
  * // Run model with inputs
  * const model = await AutoModel.from_pretrained('Xenova/wavlm-base');
  * const output = await model(inputs);
@@ -4889,17 +4882,17 @@ export class WavLMForSequenceClassification extends WavLMPreTrainedModel {
 
 /**
  * WavLM Model with an XVector feature extraction head on top for tasks like Speaker Verification.
- * 
+ *
  * **Example:** Extract speaker embeddings with `WavLMForXVector`.
  * ```javascript
  * import { AutoProcessor, AutoModel, read_audio } from '@xenova/transformers';
- * 
+ *
  * // Read and preprocess audio
  * const processor = await AutoProcessor.from_pretrained('Xenova/wavlm-base-plus-sv');
  * const url = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav';
  * const audio = await read_audio(url, 16000);
  * const inputs = await processor(audio);
- * 
+ *
  * // Run model with inputs
  * const model = await AutoModel.from_pretrained('Xenova/wavlm-base-plus-sv');
  * const outputs = await model(inputs);
@@ -4932,17 +4925,17 @@ export class WavLMForXVector extends WavLMPreTrainedModel {
 
 /**
  * WavLM Model with a frame classification head on top for tasks like Speaker Diarization.
- * 
+ *
  * **Example:** Perform speaker diarization with `WavLMForAudioFrameClassification`.
  * ```javascript
  * import { AutoProcessor, AutoModelForAudioFrameClassification, read_audio } from '@xenova/transformers';
- * 
+ *
  * // Read and preprocess audio
  * const processor = await AutoProcessor.from_pretrained('Xenova/wavlm-base-plus-sd');
  * const url = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav';
  * const audio = await read_audio(url, 16000);
  * const inputs = await processor(audio);
- * 
+ *
  * // Run model with inputs
  * const model = await AutoModelForAudioFrameClassification.from_pretrained('Xenova/wavlm-base-plus-sd');
  * const { logits } = await model(inputs);
@@ -4954,7 +4947,7 @@ export class WavLMForXVector extends WavLMPreTrainedModel {
  * //     size: 1098
  * //   }
  * // }
- * 
+ *
  * const labels = logits[0].sigmoid().tolist().map(
  *     frames => frames.map(speaker => speaker > 0.5 ? 1 : 0)
  * );
@@ -4992,20 +4985,20 @@ export class SpeechT5Model extends SpeechT5PreTrainedModel { };
 
 /**
  * SpeechT5 Model with a speech encoder and a text decoder.
- * 
+ *
  * **Example:** Generate speech from text with `SpeechT5ForSpeechToText`.
  * ```javascript
  * import { AutoTokenizer, AutoProcessor, SpeechT5ForTextToSpeech, SpeechT5HifiGan, Tensor } from '@xenova/transformers';
- * 
+ *
  * // Load the tokenizer and processor
  * const tokenizer = await AutoTokenizer.from_pretrained('Xenova/speecht5_tts');
  * const processor = await AutoProcessor.from_pretrained('Xenova/speecht5_tts');
- * 
+ *
  * // Load the models
  * // NOTE: We use the unquantized versions as they are more accurate
  * const model = await SpeechT5ForTextToSpeech.from_pretrained('Xenova/speecht5_tts', { quantized: false });
  * const vocoder = await SpeechT5HifiGan.from_pretrained('Xenova/speecht5_hifigan', { quantized: false });
- * 
+ *
  * // Load speaker embeddings from URL
  * const speaker_embeddings_data = new Float32Array(
  *     await (await fetch('https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/speaker_embeddings.bin')).arrayBuffer()
@@ -5015,10 +5008,10 @@ export class SpeechT5Model extends SpeechT5PreTrainedModel { };
  *     speaker_embeddings_data,
  *     [1, speaker_embeddings_data.length]
  * )
- * 
+ *
  * // Run tokenization
  * const { input_ids } = tokenizer('Hello, my dog is cute');
- * 
+ *
  * // Generate waveform
  * const { waveform } = await model.generate_speech(input_ids, speaker_embeddings, { vocoder });
  * console.log(waveform)
@@ -5154,7 +5147,7 @@ export class SpeechT5ForTextToSpeech extends SpeechT5PreTrainedModel {
 
 /**
  * HiFi-GAN vocoder.
- * 
+ *
  * See [SpeechT5ForSpeechToText](./models#module_models.SpeechT5ForSpeechToText) for example usage.
  */
 export class SpeechT5HifiGan extends PreTrainedModel {
@@ -5294,20 +5287,20 @@ export class ClapModel extends ClapPreTrainedModel { }
 
 /**
  * CLAP Text Model with a projection layer on top (a linear layer on top of the pooled output).
- * 
+ *
  * **Example:** Compute text embeddings with `ClapTextModelWithProjection`.
- * 
+ *
  * ```javascript
  * import { AutoTokenizer, ClapTextModelWithProjection } from '@xenova/transformers';
- * 
+ *
  * // Load tokenizer and text model
  * const tokenizer = await AutoTokenizer.from_pretrained('Xenova/clap-htsat-unfused');
  * const text_model = await ClapTextModelWithProjection.from_pretrained('Xenova/clap-htsat-unfused');
- * 
+ *
  * // Run tokenization
  * const texts = ['a sound of a cat', 'a sound of a dog'];
  * const text_inputs = tokenizer(texts, { padding: true, truncation: true });
- * 
+ *
  * // Compute embeddings
  * const { text_embeds } = await text_model(text_inputs);
  * // Tensor {
@@ -5330,20 +5323,20 @@ export class ClapTextModelWithProjection extends ClapPreTrainedModel {
 
 /**
  * CLAP Audio Model with a projection layer on top (a linear layer on top of the pooled output).
- * 
+ *
  * **Example:** Compute audio embeddings with `ClapAudioModelWithProjection`.
- * 
+ *
  * ```javascript
  * import { AutoProcessor, ClapAudioModelWithProjection, read_audio } from '@xenova/transformers';
- * 
+ *
  * // Load processor and audio model
  * const processor = await AutoProcessor.from_pretrained('Xenova/clap-htsat-unfused');
  * const audio_model = await ClapAudioModelWithProjection.from_pretrained('Xenova/clap-htsat-unfused');
- * 
+ *
  * // Read audio and run processor
  * const audio = await read_audio('https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/cat_meow.wav');
  * const audio_inputs = await processor(audio);
- * 
+ *
  * // Compute embeddings
  * const { audio_embeds } = await audio_model(audio_inputs);
  * // Tensor {
@@ -5371,18 +5364,18 @@ export class VitsPreTrainedModel extends PreTrainedModel { }
 
 /**
  * The complete VITS model, for text-to-speech synthesis.
- * 
+ *
  * **Example:** Generate speech from text with `VitsModel`.
  * ```javascript
  * import { AutoTokenizer, VitsModel } from '@xenova/transformers';
- * 
+ *
  * // Load the tokenizer and model
  * const tokenizer = await AutoTokenizer.from_pretrained('Xenova/mms-tts-eng');
  * const model = await VitsModel.from_pretrained('Xenova/mms-tts-eng');
- * 
+ *
  * // Run tokenization
  * const inputs = tokenizer('I love transformers');
- * 
+ *
  * // Generate waveform
  * const { waveform } = await model(inputs);
  * // Tensor {
@@ -5509,7 +5502,7 @@ export class PretrainedMixin {
     static MODEL_CLASS_MAPPINGS = null;
 
     /**
-     * Whether to attempt to instantiate the base class (`PretrainedModel`) if 
+     * Whether to attempt to instantiate the base class (`PretrainedModel`) if
      * the model type is not found in the mapping.
      */
     static BASE_IF_FAIL = false;
@@ -5524,6 +5517,8 @@ export class PretrainedMixin {
         local_files_only = false,
         revision = 'main',
         model_file_name = null,
+        device = 'AUTO',
+        inferenceCallback = null,
     } = {}) {
 
         let options = {
@@ -5534,6 +5529,8 @@ export class PretrainedMixin {
             local_files_only,
             revision,
             model_file_name,
+            device,
+            inferenceCallback,
         }
         config = await AutoConfig.from_pretrained(pretrained_model_name_or_path, options);
         if (!options.config) {
@@ -5928,7 +5925,7 @@ for (const [name, model, type] of CUSTOM_MAPPING) {
 /**
  * Helper class which is used to instantiate pretrained models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModel.from_pretrained('bert-base-uncased');
  */
@@ -5942,7 +5939,7 @@ export class AutoModel extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained sequence classification models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForSequenceClassification.from_pretrained('distilbert-base-uncased-finetuned-sst-2-english');
  */
@@ -5953,7 +5950,7 @@ export class AutoModelForSequenceClassification extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained token classification models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForTokenClassification.from_pretrained('Davlan/distilbert-base-multilingual-cased-ner-hrl');
  */
@@ -5964,7 +5961,7 @@ export class AutoModelForTokenClassification extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained sequence-to-sequence models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForSeq2SeqLM.from_pretrained('t5-small');
  */
@@ -5975,7 +5972,7 @@ export class AutoModelForSeq2SeqLM extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained sequence-to-sequence speech-to-text models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForSpeechSeq2Seq.from_pretrained('openai/whisper-tiny.en');
  */
@@ -5986,7 +5983,7 @@ export class AutoModelForSpeechSeq2Seq extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained sequence-to-sequence text-to-spectrogram models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForTextToSpectrogram.from_pretrained('microsoft/speecht5_tts');
  */
@@ -5997,7 +5994,7 @@ export class AutoModelForTextToSpectrogram extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained text-to-waveform models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForTextToSpectrogram.from_pretrained('facebook/mms-tts-eng');
  */
@@ -6008,7 +6005,7 @@ export class AutoModelForTextToWaveform extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained causal language models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForCausalLM.from_pretrained('gpt2');
  */
@@ -6019,7 +6016,7 @@ export class AutoModelForCausalLM extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained masked language models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForMaskedLM.from_pretrained('bert-base-uncased');
  */
@@ -6030,7 +6027,7 @@ export class AutoModelForMaskedLM extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained question answering models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForQuestionAnswering.from_pretrained('distilbert-base-cased-distilled-squad');
  */
@@ -6041,7 +6038,7 @@ export class AutoModelForQuestionAnswering extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained vision-to-sequence models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForVision2Seq.from_pretrained('nlpconnect/vit-gpt2-image-captioning');
  */
@@ -6052,7 +6049,7 @@ export class AutoModelForVision2Seq extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained image classification models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForImageClassification.from_pretrained('google/vit-base-patch16-224');
  */
@@ -6063,7 +6060,7 @@ export class AutoModelForImageClassification extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained image segmentation models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForImageSegmentation.from_pretrained('facebook/detr-resnet-50-panoptic');
  */
@@ -6074,7 +6071,7 @@ export class AutoModelForImageSegmentation extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained image segmentation models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForSemanticSegmentation.from_pretrained('nvidia/segformer-b3-finetuned-cityscapes-1024-1024');
  */
@@ -6085,7 +6082,7 @@ export class AutoModelForSemanticSegmentation extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained object detection models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForObjectDetection.from_pretrained('facebook/detr-resnet-50');
  */
@@ -6101,7 +6098,7 @@ export class AutoModelForZeroShotObjectDetection extends PretrainedMixin {
 /**
  * Helper class which is used to instantiate pretrained mask generation models with the `from_pretrained` function.
  * The chosen model class is determined by the type specified in the model config.
- * 
+ *
  * @example
  * let model = await AutoModelForMaskGeneration.from_pretrained('Xenova/sam-vit-base');
  */

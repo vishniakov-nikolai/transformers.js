@@ -1,18 +1,20 @@
 
 /**
  * @file Utility functions to interact with the Hugging Face Hub (https://huggingface.co/models)
- * 
+ *
  * @module utils/hub
  */
 
 import fs from 'fs';
 import path from 'path';
+import fetch from 'node-fetch';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 import { env } from '../env.js';
 import { dispatchCallback } from './core.js';
 
 /**
- * @typedef {Object} PretrainedOptions Options for loading a pretrained model.     
+ * @typedef {Object} PretrainedOptions Options for loading a pretrained model.
  * @property {boolean?} [quantized=true] Whether to load the 8-bit quantized version of the model (only applicable when loading model files).
  * @property {function} [progress_callback=null] If specified, this function will be called during model construction, to provide the user with progress updates.
  * @property {Object} [config=null] Configuration for the model to use instead of an automatically loaded configuration. Configuration can be automatically loaded when:
@@ -24,6 +26,8 @@ import { dispatchCallback } from './core.js';
  * since we use a git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any identifier allowed by git.
  * NOTE: This setting is ignored for local requests.
  * @property {string} [model_file_name=null] If specified, load the model with this name (excluding the .onnx suffix). Currently only valid for encoder- or decoder-only models.
+ * @property {string} [device="AUTO"]
+ * @property {function} [inferenceCallback=null]
  */
 
 class FileResponse {
@@ -135,7 +139,7 @@ class FileResponse {
     /**
      * Reads the contents of the file specified by the filePath property and returns a Promise that
      * resolves with a parsed JavaScript object containing the file's contents.
-     * 
+     *
      * @returns {Promise<Object>} A Promise that resolves with a parsed JavaScript object containing the file's contents.
      * @throws {Error} If the file cannot be read.
      */
@@ -174,6 +178,12 @@ function isValidUrl(string, protocols = null, validHosts = null) {
  * @returns {Promise<FileResponse|Response>} A promise that resolves to a FileResponse object (if the file is retrieved using the FileSystem API), or a Response object (if the file is retrieved using the Fetch API).
  */
 export async function getFile(urlOrPath) {
+    const proxyUrl = process.env.http_proxy || process.env.HTTP_PROXY || process.env.npm_config_proxy;
+    let agent;
+
+    if (proxyUrl) {
+        agent = new HttpsProxyAgent(proxyUrl);
+    }
 
     if (env.useFS && !isValidUrl(urlOrPath, ['http:', 'https:', 'blob:'])) {
         return new FileResponse(urlOrPath);
@@ -196,12 +206,14 @@ export async function getFile(urlOrPath) {
                 headers.set('Authorization', `Bearer ${token}`);
             }
         }
-        return fetch(urlOrPath, { headers });
+        if (agent) console.log(`Proxy agent configured using: '${proxyUrl}'`);
+        return fetch(urlOrPath, { headers, agent });
     } else {
         // Running in a browser-environment, so we use default headers
         // NOTE: We do not allow passing authorization headers in the browser,
         // since this would require exposing the token to the client.
-        return fetch(urlOrPath);
+        if (agent) console.log(`Proxy agent configured using: '${proxyUrl}'`);
+        return fetch(urlOrPath, { agent });
     }
 }
 
@@ -241,7 +253,7 @@ function handleError(status, remoteURL, fatal) {
 class FileCache {
     /**
      * Instantiate a `FileCache` object.
-     * @param {string} path 
+     * @param {string} path
      */
     constructor(path) {
         this.path = path;
@@ -249,7 +261,7 @@ class FileCache {
 
     /**
      * Checks whether the given request is in the cache.
-     * @param {string} request 
+     * @param {string} request
      * @returns {Promise<FileResponse | undefined>}
      */
     async match(request) {
@@ -266,8 +278,8 @@ class FileCache {
 
     /**
      * Adds the given response to the cache.
-     * @param {string} request 
-     * @param {Response|FileResponse} response 
+     * @param {string} request
+     * @param {Response|FileResponse} response
      * @returns {Promise<void>}
      */
     async put(request, response) {
@@ -293,7 +305,7 @@ class FileCache {
 }
 
 /**
- * 
+ *
  * @param {FileCache|Cache} cache The cache to search
  * @param {string[]} names The names of the item to search for
  * @returns {Promise<FileResponse|Response|undefined>} The item from the cache, or undefined if not found.
@@ -311,17 +323,17 @@ async function tryCache(cache, ...names) {
 }
 
 /**
- * 
+ *
  * Retrieves a file from either a remote URL using the Fetch API or from the local file system using the FileSystem API.
  * If the filesystem is available and `env.useCache = true`, the file will be downloaded and cached.
- * 
+ *
  * @param {string} path_or_repo_id This can be either:
  * - a string, the *model id* of a model repo on huggingface.co.
  * - a path to a *directory* potentially containing the file.
  * @param {string} filename The name of the file to locate in `path_or_repo`.
  * @param {boolean} [fatal=true] Whether to throw an error if the file is not found.
  * @param {PretrainedOptions} [options] An object containing optional parameters.
- * 
+ *
  * @throws Will throw an error if the file is not found and `fatal` is true.
  * @returns {Promise} A Promise that resolves with the file content as a buffer.
  */
@@ -598,12 +610,15 @@ async function readResponse(response, progress_callback) {
     let buffer = new Uint8Array(total);
     let loaded = 0;
 
-    const reader = response.body.getReader();
-    async function read() {
-        const { done, value } = await reader.read();
-        if (done) return;
+    let resolve = null;
+    let reject = null;
+    const p = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+    });
 
-        let newLoaded = loaded + value.length;
+    response.body.on('data', async (chunk) => {
+        let newLoaded = loaded + chunk.length;
         if (newLoaded > total) {
             total = newLoaded;
 
@@ -616,7 +631,7 @@ async function readResponse(response, progress_callback) {
 
             buffer = newBuffer;
         }
-        buffer.set(value, loaded)
+        buffer.set(chunk, loaded)
         loaded = newLoaded;
 
         const progress = (loaded / total) * 100;
@@ -626,15 +641,14 @@ async function readResponse(response, progress_callback) {
             progress: progress,
             loaded: loaded,
             total: total,
-        })
+        });
+    });
 
-        return read();
-    }
+    response.body.on('end', async () => {
+        resolve(buffer);
+    });
 
-    // Actually read
-    await read();
-
-    return buffer;
+    return p;
 }
 
 /**

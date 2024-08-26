@@ -6,15 +6,19 @@
  * So, we just import both packages, and use the appropriate one based on the environment:
  *   - When running in node, we use `onnxruntime-node`.
  *   - When running in the browser, we use `onnxruntime-web` (`onnxruntime-node` is not bundled).
- * 
+ *
  * This module is not directly exported, but can be accessed through the environment variables:
  * ```javascript
  * import { env } from '@xenova/transformers';
  * console.log(env.backends.onnx);
  * ```
- * 
+ *
  * @module backends/onnx
  */
+
+import {
+    getModelFile,
+} from '../utils/hub.js';
 
 // NOTE: Import order matters here. We need to import `onnxruntime-node` before `onnxruntime-web`.
 // In either case, we select the default export if it exists, otherwise we use the named export.
@@ -46,5 +50,30 @@ if (typeof process !== 'undefined' && process?.release?.name === 'node') {
     const isIOS = typeof navigator !== 'undefined' && /iP(hone|od|ad).+16_4.+AppleWebKit/.test(navigator.userAgent);
     if (isIOS) {
         ONNX.env.wasm.simd = false;
+    }
+}
+
+export async function create(pretrained_model_name_or_path, fileName, options) {
+    let modelFileName = `onnx/${fileName}${options.quantized ? '_quantized' : ''}.onnx`;
+    let buffer = await getModelFile(pretrained_model_name_or_path, modelFileName, true, options);
+
+    try {
+        return await ONNX.InferenceSession.create(buffer, {
+            executionProviders,
+        });
+    } catch (err) {
+        // If the execution provided was only wasm, throw the error
+        if (executionProviders.length === 1 && executionProviders[0] === 'wasm') {
+            throw err;
+        }
+
+        console.warn(err);
+        console.warn(
+            'Something went wrong during model construction (most likely a missing operation). ' +
+            'Using `wasm` as a fallback. '
+        )
+        return await ONNX.InferenceSession.create(buffer, {
+            executionProviders: ['wasm']
+        });
     }
 }
