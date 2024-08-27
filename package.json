@@ -4,7 +4,7 @@
   "description": "State-of-the-art Machine Learning for the web. Run 🤗 Transformers directly in your browser, with no need for a server!",
   "main": "./src/transformers.js",
   "types": "./types/transformers.d.ts",
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "typegen": "tsc ./src/transformers.js --allowJs --declaration --emitDeclarationOnly --declarationMap --outDir types",
     "dev": "webpack serve --no-client-overlay",
@@ -40,7 +40,7 @@
   "dependencies": {
     "@huggingface/jinja": "^0.2.2",
     "https-proxy-agent": "^7.0.5",
-    "node-fetch": "^3.3.2",
+    "node-fetch": "^2.7.0",
     "onnxruntime-web": "1.14.0",
     "openvino-node": "^2024.3.0",
     "sharp": "^0.32.0"

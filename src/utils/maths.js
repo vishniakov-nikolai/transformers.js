@@ -1,10 +1,10 @@
 
 /**
- * @file Helper module for mathematical processing. 
- * 
- * These functions and classes are only used internally, 
+ * @file Helper module for mathematical processing.
+ *
+ * These functions and classes are only used internally,
  * meaning an end-user shouldn't need to access anything here.
- * 
+ *
  * @module utils/maths
  */
 
@@ -17,7 +17,7 @@
 /**
  * @param {TypedArray} input
  */
-export function interpolate_data(input, [in_channels, in_height, in_width], [out_height, out_width], mode = 'bilinear', align_corners = false) {
+function interpolate_data(input, [in_channels, in_height, in_width], [out_height, out_width], mode = 'bilinear', align_corners = false) {
     // TODO use mode and align_corners
 
     // Output image dimensions
@@ -89,13 +89,13 @@ export function interpolate_data(input, [in_channels, in_height, in_width], [out
 
 /**
  * Helper method to permute a `AnyTypedArray` directly
- * @template {AnyTypedArray} T 
- * @param {T} array 
- * @param {number[]} dims 
- * @param {number[]} axes 
+ * @template {AnyTypedArray} T
+ * @param {T} array
+ * @param {number[]} dims
+ * @param {number[]} axes
  * @returns {[T, number[]]} The permuted array and the new shape.
  */
-export function permute_data(array, dims, axes) {
+function permute_data(array, dims, axes) {
     // Calculate the new shape of the permuted array
     // and the stride of the original array
     const shape = new Array(axes.length);
@@ -134,7 +134,7 @@ export function permute_data(array, dims, axes) {
  * @param {T} arr The array of numbers to compute the softmax of.
  * @returns {T} The softmax array.
  */
-export function softmax(arr) {
+function softmax(arr) {
     // Compute the maximum value in the array
     const maxVal = max(arr)[0];
 
@@ -157,7 +157,7 @@ export function softmax(arr) {
  * @param {T} arr The input array to calculate the log_softmax function for.
  * @returns {T} The resulting log_softmax array.
  */
-export function log_softmax(arr) {
+function log_softmax(arr) {
     // Compute the maximum value in the array
     const maxVal = max(arr)[0];
 
@@ -182,7 +182,7 @@ export function log_softmax(arr) {
  * @param {number[]} arr2 The second array.
  * @returns {number} The dot product of arr1 and arr2.
  */
-export function dot(arr1, arr2) {
+function dot(arr1, arr2) {
     let result = 0;
     for (let i = 0; i < arr1.length; ++i) {
         result += arr1[i] * arr2[i];
@@ -197,7 +197,7 @@ export function dot(arr1, arr2) {
  * @param {number|null} [top_k=0] The number of top items to return (default: 0 = return all)
  * @returns {[number, any][]} The top k items, sorted by descending order
  */
-export function getTopItems(items, top_k = 0) {
+function getTopItems(items, top_k = 0) {
     // if top == 0, return all
 
     items = Array.from(items)
@@ -218,7 +218,7 @@ export function getTopItems(items, top_k = 0) {
  * @param {number[]} arr2 The second array.
  * @returns {number} The cosine similarity between the two arrays.
  */
-export function cos_sim(arr1, arr2) {
+function cos_sim(arr1, arr2) {
     // Calculate dot product of the two arrays
     const dotProduct = dot(arr1, arr2);
 
@@ -239,7 +239,7 @@ export function cos_sim(arr1, arr2) {
  * @param {number[]} arr The array to calculate the magnitude of.
  * @returns {number} The magnitude of the array.
  */
-export function magnitude(arr) {
+function magnitude(arr) {
     return Math.sqrt(arr.reduce((acc, val) => acc + val * val, 0));
 }
 
@@ -250,7 +250,7 @@ export function magnitude(arr) {
  * @returns {number[]} the value and index of the minimum element, of the form: [valueOfMin, indexOfMin]
  * @throws {Error} If array is empty.
  */
-export function min(arr) {
+function min(arr) {
     if (arr.length === 0) throw Error('Array must not be empty');
     let min = arr[0];
     let indexOfMin = 0;
@@ -270,7 +270,7 @@ export function min(arr) {
  * @returns {[number, number]} the value and index of the maximum element, of the form: [valueOfMax, indexOfMax]
  * @throws {Error} If array is empty.
  */
-export function max(arr) {
+function max(arr) {
     if (arr.length === 0) throw Error('Array must not be empty');
     let max = arr[0];
     let indexOfMax = 0;
@@ -290,7 +290,7 @@ function isPowerOfTwo(number) {
 
 /**
  * Implementation of Radix-4 FFT.
- * 
+ *
  * P2FFT class provides functionality for performing Fast Fourier Transform on arrays
  * which are a power of two in length.
  * Code adapted from https://www.npmjs.com/package/fft.js
@@ -346,7 +346,7 @@ class P2FFT {
 
     /**
      * Converts a complex number representation stored in a Float64Array to an array of real numbers.
-     * 
+     *
      * @param {Float64Array} complex The complex number representation to be converted.
      * @param {number[]} [storage] An optional array to store the result in.
      * @returns {number[]} An array of real numbers representing the input complex number representation.
@@ -375,12 +375,12 @@ class P2FFT {
 
     /**
      * Performs a Fast Fourier Transform (FFT) on the given input data and stores the result in the output buffer.
-     * 
+     *
      * @param {Float64Array} out The output buffer to store the result.
      * @param {Float64Array} data The input data to transform.
-     * 
+     *
      * @throws {Error} Input and output buffers must be different.
-     * 
+     *
      * @returns {void}
      */
     transform(out, data) {
@@ -411,7 +411,7 @@ class P2FFT {
      * Performs an inverse FFT transformation on the given `data` array, and stores the result in `out`.
      * The `out` array must be a different buffer than the `data` array. The `out` array will contain the
      * result of the transformation. The `data` array will not be modified.
-     * 
+     *
      * @param {Float64Array} out The output buffer for the transformed data.
      * @param {Float64Array} data The input data to transform.
      * @throws {Error} If `out` and `data` refer to the same buffer.
@@ -559,7 +559,7 @@ class P2FFT {
      * @param {number} off Index of input array to start reading from
      * @param {number} step Step size between elements in input array
      * @param {number} inv Scaling factor for inverse transform
-     * 
+     *
      * @returns {void}
      */
     _singleTransform4(data, out, outOff, off, step, inv) {
@@ -723,13 +723,13 @@ class P2FFT {
 
     /**
      * Performs a single real input radix-2 transformation on the provided data
-     * 
+     *
      * @param {Float64Array} data The input data array
      * @param {Float64Array} out The output data array
      * @param {number} outOff The output offset
      * @param {number} off The input offset
      * @param {number} step The step
-     * 
+     *
      * @returns {void}
      */
     _singleRealTransform2(data, out, outOff, off, step) {
@@ -789,7 +789,7 @@ class P2FFT {
 /**
  * NP2FFT class provides functionality for performing Fast Fourier Transform on arrays
  * which are not a power of two in length. In such cases, the chirp-z transform is used.
- * 
+ *
  * For more information, see: https://math.stackexchange.com/questions/77118/non-power-of-2-ffts/77156#77156
  */
 class NP2FFT {
@@ -905,7 +905,7 @@ class NP2FFT {
     }
 }
 
-export class FFT {
+class FFT {
     constructor(fft_length) {
         this.fft_length = fft_length;
         this.isPowerOfTwo = isPowerOfTwo(fft_length);
@@ -933,7 +933,7 @@ export class FFT {
  * @param {AnyTypedArray} data The input array
  * @param {number} windowSize The window size
  */
-export function medianFilter(data, windowSize) {
+function medianFilter(data, windowSize) {
 
     if (windowSize % 2 === 0 || windowSize <= 0) {
         throw new Error('Window size must be a positive odd number');
@@ -974,7 +974,7 @@ export function medianFilter(data, windowSize) {
  * @param {number} decimals The number of decimals
  * @returns {number} The rounded number
  */
-export function round(num, decimals) {
+function round(num, decimals) {
     const pow = Math.pow(10, decimals);
     return Math.round(num * pow) / pow;
 }
@@ -983,12 +983,29 @@ export function round(num, decimals) {
  * Helper function to round a number to the nearest integer, with ties rounded to the nearest even number.
  * Also known as "bankers' rounding". This is the default rounding mode in python. For example:
  * 1.5 rounds to 2 and 2.5 rounds to 2.
- * 
+ *
  * @param {number} x The number to round
  * @returns {number} The rounded number
  */
-export function bankers_round(x) {
+function bankers_round(x) {
     const r = Math.round(x);
     const br = Math.abs(x) % 1 === 0.5 ? (r % 2 === 0 ? r : r - 1) : r;
     return br;
 }
+
+module.exports = {
+    interpolate_data,
+    permute_data,
+    softmax,
+    log_softmax,
+    dot,
+    getTopItems,
+    cos_sim,
+    magnitude,
+    min,
+    max,
+    FFT,
+    medianFilter,
+    round,
+    bankers_round,
+};

@@ -1,7 +1,7 @@
 
 /**
  * @file Processors are used to prepare non-textual inputs (e.g., image or audio) for a model.
- * 
+ *
  * **Example:** Using a `WhisperProcessor` to prepare an audio input for a model.
  * ```javascript
  * import { AutoProcessor, read_audio } from '@xenova/transformers';
@@ -16,42 +16,46 @@
  * //   size: 240000,
  * // }
  * ```
- * 
+ *
  * @module processors
  */
-import {
+const {
     Callable,
     calculateDimensions,
     calculateReflectOffset,
-} from './utils/core.js';
+} = require('./utils/core.js');
 
-import {
-    getModelJSON,
-} from './utils/hub.js';
+const { getModelJSON } = require('./utils/hub.js');
 
-import {
+const {
     min,
     max,
     softmax,
     bankers_round,
-} from './utils/maths.js';
+} = require('./utils/maths.js');
 
+const {
+    Tensor,
+    permute,
+    cat,
+    interpolate,
+    stack
+} = require('./utils/tensor.js');
 
-import { Tensor, permute, cat, interpolate, stack } from './utils/tensor.js';
+const { RawImage } = require('./utils/image.js');
 
-import { RawImage } from './utils/image.js';
-import {
+const {
     window_function,
     spectrogram,
     mel_filter_bank,
-} from './utils/audio.js';
+} = require('./utils/audio.js');
 
 
 // Helper functions
 
 /**
  * Converts bounding boxes from center format to corners format.
- * 
+ *
  * @param {number[]} arr The coordinate for the center of the box and its width, height dimensions (center_x, center_y, width, height)
  * @returns {number[]} The coodinates for the top-left and bottom-right corners of the box (top_left_x, top_left_y, bottom_right_x, bottom_right_y)
  */
@@ -208,7 +212,7 @@ function enforce_size_divisibility([width, height], divisor) {
  *
  * @extends Callable
  */
-export class FeatureExtractor extends Callable {
+class FeatureExtractor extends Callable {
     /**
      * Constructs a new FeatureExtractor instance.
      *
@@ -232,7 +236,7 @@ export class FeatureExtractor extends Callable {
  *
  * @extends FeatureExtractor
  */
-export class ImageFeatureExtractor extends FeatureExtractor {
+class ImageFeatureExtractor extends FeatureExtractor {
 
     /**
      * Constructs a new ImageFeatureExtractor instance.
@@ -454,12 +458,12 @@ export class ImageFeatureExtractor extends FeatureExtractor {
      * Find the target (width, height) dimension of the output image after
      * resizing given the input image and the desired size.
      * @param {RawImage} image The image to resize.
-     * @param {any} size The size to use for resizing the image. 
+     * @param {any} size The size to use for resizing the image.
      * @returns {[number, number]} The target (width, height) dimension of the output image after resizing.
      */
     get_resize_output_image_size(image, size) {
         // `size` comes in many forms, so we need to handle them all here:
-        // 1. `size` is an integer, in which case we resize the image to be a square 
+        // 1. `size` is an integer, in which case we resize the image to be a square
 
         const [srcWidth, srcHeight] = image.size;
 
@@ -495,7 +499,7 @@ export class ImageFeatureExtractor extends FeatureExtractor {
             const newHeight = srcHeight * shortResizeFactor;
 
             // The new width and height might be greater than `longest_edge`, so
-            // we downscale again to ensure the largest dimension is `longest_edge` 
+            // we downscale again to ensure the largest dimension is `longest_edge`
             const longResizeFactor = longest_edge === undefined
                 ? 1 // If `longest_edge` is not set, don't downscale
                 : Math.min(longest_edge / newWidth, longest_edge / newHeight);
@@ -624,7 +628,7 @@ export class ImageFeatureExtractor extends FeatureExtractor {
         const reshaped_input_size = [image.height, image.width];
 
         // NOTE: All pixel-level manipulation (i.e., modifying `pixelData`)
-        // occurs with data in the hwc format (height, width, channels), 
+        // occurs with data in the hwc format (height, width, channels),
         // to emulate the behavior of the original Python code (w/ numpy).
         let pixelData = Float32Array.from(image.data);
         let imgDims = [image.height, image.width, image.channels];
@@ -719,7 +723,7 @@ export class ImageFeatureExtractor extends FeatureExtractor {
 
 }
 
-export class SegformerFeatureExtractor extends ImageFeatureExtractor {
+class SegformerFeatureExtractor extends ImageFeatureExtractor {
 
     /**
      * Converts the output of `SegformerForSemanticSegmentation` into semantic segmentation maps.
@@ -784,14 +788,14 @@ export class SegformerFeatureExtractor extends ImageFeatureExtractor {
         return toReturn;
     }
 }
-export class DPTFeatureExtractor extends ImageFeatureExtractor { }
-export class DPTImageProcessor extends DPTFeatureExtractor { } // NOTE: extends DPTFeatureExtractor
-export class BitImageProcessor extends ImageFeatureExtractor { }
-export class GLPNFeatureExtractor extends ImageFeatureExtractor { }
-export class CLIPFeatureExtractor extends ImageFeatureExtractor { }
-export class ChineseCLIPFeatureExtractor extends ImageFeatureExtractor { }
-export class SiglipImageProcessor extends ImageFeatureExtractor { }
-export class ConvNextFeatureExtractor extends ImageFeatureExtractor {
+class DPTFeatureExtractor extends ImageFeatureExtractor { }
+class DPTImageProcessor extends DPTFeatureExtractor { } // NOTE: extends DPTFeatureExtractor
+class BitImageProcessor extends ImageFeatureExtractor { }
+class GLPNFeatureExtractor extends ImageFeatureExtractor { }
+class CLIPFeatureExtractor extends ImageFeatureExtractor { }
+class ChineseCLIPFeatureExtractor extends ImageFeatureExtractor { }
+class SiglipImageProcessor extends ImageFeatureExtractor { }
+class ConvNextFeatureExtractor extends ImageFeatureExtractor {
     constructor(config) {
         super(config);
 
@@ -831,11 +835,11 @@ export class ConvNextFeatureExtractor extends ImageFeatureExtractor {
         return image;
     }
 }
-export class ConvNextImageProcessor extends ConvNextFeatureExtractor { }  // NOTE extends ConvNextFeatureExtractor
-export class ViTFeatureExtractor extends ImageFeatureExtractor { }
-export class ViTImageProcessor extends ImageFeatureExtractor { }
+class ConvNextImageProcessor extends ConvNextFeatureExtractor { }  // NOTE extends ConvNextFeatureExtractor
+class ViTFeatureExtractor extends ImageFeatureExtractor { }
+class ViTImageProcessor extends ImageFeatureExtractor { }
 
-export class EfficientNetImageProcessor extends ImageFeatureExtractor {
+class EfficientNetImageProcessor extends ImageFeatureExtractor {
     constructor(config) {
         super(config);
         this.include_top = this.config.include_top ?? true;
@@ -846,19 +850,19 @@ export class EfficientNetImageProcessor extends ImageFeatureExtractor {
 }
 
 
-export class MobileViTFeatureExtractor extends ImageFeatureExtractor { }
-export class MobileViTImageProcessor extends MobileViTFeatureExtractor { } // NOTE extends MobileViTFeatureExtractor
-export class OwlViTFeatureExtractor extends ImageFeatureExtractor {
+class MobileViTFeatureExtractor extends ImageFeatureExtractor { }
+class MobileViTImageProcessor extends MobileViTFeatureExtractor { } // NOTE extends MobileViTFeatureExtractor
+class OwlViTFeatureExtractor extends ImageFeatureExtractor {
     /** @type {post_process_object_detection} */
     post_process_object_detection(...args) {
         return post_process_object_detection(...args);
     }
 }
-export class Owlv2ImageProcessor extends OwlViTFeatureExtractor { } // NOTE extends OwlViTFeatureExtractor
+class Owlv2ImageProcessor extends OwlViTFeatureExtractor { } // NOTE extends OwlViTFeatureExtractor
 
-export class DeiTFeatureExtractor extends ImageFeatureExtractor { }
-export class BeitFeatureExtractor extends ImageFeatureExtractor { }
-export class DonutFeatureExtractor extends ImageFeatureExtractor {
+class DeiTFeatureExtractor extends ImageFeatureExtractor { }
+class BeitFeatureExtractor extends ImageFeatureExtractor { }
+class DonutFeatureExtractor extends ImageFeatureExtractor {
     pad_image(pixelData, imgDims, padSize, options = {}) {
         const [imageHeight, imageWidth, imageChannels] = imgDims;
 
@@ -884,7 +888,7 @@ export class DonutFeatureExtractor extends ImageFeatureExtractor {
         });
     }
 }
-export class NougatImageProcessor extends DonutFeatureExtractor { } // NOTE extends DonutFeatureExtractor
+class NougatImageProcessor extends DonutFeatureExtractor { } // NOTE extends DonutFeatureExtractor
 
 /**
  * @typedef {object} DetrFeatureExtractorResultProps
@@ -897,7 +901,7 @@ export class NougatImageProcessor extends DonutFeatureExtractor { } // NOTE exte
  *
  * @extends ImageFeatureExtractor
  */
-export class DetrFeatureExtractor extends ImageFeatureExtractor {
+class DetrFeatureExtractor extends ImageFeatureExtractor {
     /**
      * Calls the feature extraction process on an array of images, preprocesses
      * each image, and concatenates the resulting features into a single Tensor.
@@ -1053,7 +1057,7 @@ export class DetrFeatureExtractor extends ImageFeatureExtractor {
 
         // 2. Weigh each mask by its prediction score
         // NOTE: `mask_probs` is updated in-place
-        // 
+        //
         // Temporary storage for the best label/scores for each pixel ([height, width]):
         let mask_labels = new Int32Array(mask_probs[0].data.length);
         let bestScores = new Float32Array(mask_probs[0].data.length);
@@ -1210,7 +1214,7 @@ export class DetrFeatureExtractor extends ImageFeatureExtractor {
     }
 }
 
-export class YolosFeatureExtractor extends ImageFeatureExtractor {
+class YolosFeatureExtractor extends ImageFeatureExtractor {
     /** @type {post_process_object_detection} */
     post_process_object_detection(...args) {
         return post_process_object_detection(...args);
@@ -1226,13 +1230,13 @@ export class YolosFeatureExtractor extends ImageFeatureExtractor {
  * @property {Tensor} [input_labels]
  */
 
-export class SamImageProcessor extends ImageFeatureExtractor {
+class SamImageProcessor extends ImageFeatureExtractor {
 
     /**
-     * 
-     * @param {any} input_points 
-     * @param {HeightWidth[]} original_sizes 
-     * @param {HeightWidth[]} reshaped_input_sizes 
+     *
+     * @param {any} input_points
+     * @param {HeightWidth[]} original_sizes
+     * @param {HeightWidth[]} reshaped_input_sizes
      * @returns {Tensor}
      */
     reshape_input_points(input_points, original_sizes, reshaped_input_sizes) {
@@ -1278,9 +1282,9 @@ export class SamImageProcessor extends ImageFeatureExtractor {
     }
 
     /**
-     * 
-     * @param {any} input_labels 
-     * @param {Tensor} input_points 
+     *
+     * @param {any} input_labels
+     * @param {Tensor} input_points
      * @returns {Tensor}
      */
     add_input_labels(input_labels, input_points) {
@@ -1403,7 +1407,7 @@ export class SamImageProcessor extends ImageFeatureExtractor {
     }
 }
 
-export class Swin2SRImageProcessor extends ImageFeatureExtractor {
+class Swin2SRImageProcessor extends ImageFeatureExtractor {
     pad_image(pixelData, imgDims, padSize, options = {}) {
         // NOTE: In this case, `padSize` represents the size of the sliding window for the local attention.
         // In other words, the image is padded so that its width and height are multiples of `padSize`.
@@ -1424,7 +1428,7 @@ export class Swin2SRImageProcessor extends ImageFeatureExtractor {
     }
 }
 
-export class VitMatteImageProcessor extends ImageFeatureExtractor {
+class VitMatteImageProcessor extends ImageFeatureExtractor {
     /**
      * Calls the feature extraction process on an array of images, preprocesses
      * each image, and concatenates the resulting features into a single Tensor.
@@ -1466,7 +1470,7 @@ export class VitMatteImageProcessor extends ImageFeatureExtractor {
     }
 }
 
-export class WhisperFeatureExtractor extends FeatureExtractor {
+class WhisperFeatureExtractor extends FeatureExtractor {
 
     constructor(config) {
         super(config);
@@ -1548,11 +1552,11 @@ export class WhisperFeatureExtractor extends FeatureExtractor {
     }
 }
 
-export class Wav2Vec2FeatureExtractor extends FeatureExtractor {
+class Wav2Vec2FeatureExtractor extends FeatureExtractor {
 
     /**
-     * @param {Float32Array} input_values 
-     * @returns {Float32Array} 
+     * @param {Float32Array} input_values
+     * @returns {Float32Array}
      */
     _zero_mean_unit_var_norm(input_values) {
         // TODO support batch?
@@ -1590,7 +1594,7 @@ export class Wav2Vec2FeatureExtractor extends FeatureExtractor {
     }
 }
 
-export class SeamlessM4TFeatureExtractor extends FeatureExtractor {
+class SeamlessM4TFeatureExtractor extends FeatureExtractor {
 
     constructor(config) {
         super(config);
@@ -1766,7 +1770,7 @@ export class SeamlessM4TFeatureExtractor extends FeatureExtractor {
     }
 }
 
-export class ASTFeatureExtractor extends FeatureExtractor {
+class ASTFeatureExtractor extends FeatureExtractor {
 
 
     constructor(config) {
@@ -1855,7 +1859,7 @@ export class ASTFeatureExtractor extends FeatureExtractor {
     }
 }
 
-export class ClapFeatureExtractor extends FeatureExtractor {
+class ClapFeatureExtractor extends FeatureExtractor {
 
     constructor(config) {
         super(config);
@@ -1887,7 +1891,7 @@ export class ClapFeatureExtractor extends FeatureExtractor {
 
     /**
      * Extracts the mel spectrogram and prepares it for the mode based on the `truncation` and `padding` arguments.
-     * 
+     *
      * Four different path are possible:
      *   - `truncation="fusion"` and the length of the waveform is greater than the max length: the mel spectrogram
      *     will be computed on the entire audio. 3 random crops and a dowsampled version of the full mel spectrogram
@@ -1898,7 +1902,7 @@ export class ClapFeatureExtractor extends FeatureExtractor {
      *     based on `padding`, and is repeated `4` times.
      *   - `truncation="rand_trunc"` and the length of the waveform is greater than the max length: the mel
      *     spectrogram will be computed on a random crop of the waveform.
-     * 
+     *
      * @param {Float32Array|Float64Array} waveform The input waveform.
      * @param {number} max_length The maximum length of the waveform.
      * @param {string} truncation The truncation strategy to use.
@@ -1963,7 +1967,7 @@ export class ClapFeatureExtractor extends FeatureExtractor {
      *  - `self.mel_filteres_slaney` : they correspond to the default parameters of `librosa` which used
      *    `librosa.filters.mel` when computing the mel spectrogram. These filters were only used in the original
      *    implementation when the truncation mode is not `"fusion"`.
-     * 
+     *
      * @param {Float32Array|Float64Array} waveform The audio waveform to process.
      * @param {number[][]} mel_filters The mel filters to use.
      * @param {number} [max_length=null] The maximum number of frames to return.
@@ -2020,13 +2024,13 @@ export class ClapFeatureExtractor extends FeatureExtractor {
 
 
 
-export class SpeechT5FeatureExtractor extends FeatureExtractor { }
+class SpeechT5FeatureExtractor extends FeatureExtractor { }
 
 /**
  * Represents a Processor that extracts features from an input.
  * @extends Callable
  */
-export class Processor extends Callable {
+class Processor extends Callable {
     /**
      * Creates a new Processor with the given feature extractor.
      * @param {FeatureExtractor} feature_extractor The function used to extract features from the input.
@@ -2048,7 +2052,7 @@ export class Processor extends Callable {
     }
 }
 
-export class SamProcessor extends Processor {
+class SamProcessor extends Processor {
     /**
      * @borrows SamImageProcessor#_call as _call
      */
@@ -2076,7 +2080,7 @@ export class SamProcessor extends Processor {
  * Represents a WhisperProcessor that extracts features from an audio input.
  * @extends Processor
  */
-export class WhisperProcessor extends Processor {
+class WhisperProcessor extends Processor {
     /**
      * Calls the feature_extractor function with the given audio input.
      * @param {any} audio The audio input to extract features from.
@@ -2088,7 +2092,7 @@ export class WhisperProcessor extends Processor {
 }
 
 
-export class Wav2Vec2ProcessorWithLM extends Processor {
+class Wav2Vec2ProcessorWithLM extends Processor {
     /**
      * Calls the feature_extractor function with the given audio input.
      * @param {any} audio The audio input to extract features from.
@@ -2099,7 +2103,7 @@ export class Wav2Vec2ProcessorWithLM extends Processor {
     }
 }
 
-export class SpeechT5Processor extends Processor {
+class SpeechT5Processor extends Processor {
     /**
      * Calls the feature_extractor function with the given input.
      * @param {any} input The input to extract features from.
@@ -2110,19 +2114,19 @@ export class SpeechT5Processor extends Processor {
     }
 }
 
-export class OwlViTProcessor extends Processor { }
+class OwlViTProcessor extends Processor { }
 
 
 //////////////////////////////////////////////////
 /**
  * Helper class which is used to instantiate pretrained processors with the `from_pretrained` function.
  * The chosen processor class is determined by the type specified in the processor config.
- * 
+ *
  * **Example:** Load a processor using `from_pretrained`.
  * ```javascript
  * let processor = await AutoProcessor.from_pretrained('openai/whisper-tiny.en');
  * ```
- * 
+ *
  * **Example:** Run an image through a processor.
  * ```javascript
  * let processor = await AutoProcessor.from_pretrained('Xenova/clip-vit-base-patch16');
@@ -2144,7 +2148,7 @@ export class OwlViTProcessor extends Processor { }
  * // }
  * ```
  */
-export class AutoProcessor {
+class AutoProcessor {
     static FEATURE_EXTRACTOR_CLASS_MAPPING = {
         ImageFeatureExtractor,
         WhisperFeatureExtractor,
@@ -2192,17 +2196,17 @@ export class AutoProcessor {
 
     /**
      * Instantiate one of the processor classes of the library from a pretrained model.
-     * 
+     *
      * The processor class to instantiate is selected based on the `feature_extractor_type` property of the config object
      * (either passed as an argument or loaded from `pretrained_model_name_or_path` if possible)
-     * 
+     *
      * @param {string} pretrained_model_name_or_path The name or path of the pretrained model. Can be either:
      * - A string, the *model id* of a pretrained processor hosted inside a model repo on huggingface.co.
      *   Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
      *   user or organization name, like `dbmdz/bert-base-german-cased`.
      * - A path to a *directory* containing processor files, e.g., `./my_model_directory/`.
      * @param {import('./utils/hub.js').PretrainedOptions} options Additional options for loading the processor.
-     * 
+     *
      * @returns {Promise<Processor>} A new instance of the Processor class.
      */
     static async from_pretrained(pretrained_model_name_or_path, {
@@ -2246,3 +2250,46 @@ export class AutoProcessor {
 }
 //////////////////////////////////////////////////
 
+module.exports = {
+    FeatureExtractor,
+    ImageFeatureExtractor,
+    SegformerFeatureExtractor,
+    DPTFeatureExtractor,
+    DPTImageProcessor,
+    BitImageProcessor,
+    GLPNFeatureExtractor,
+    CLIPFeatureExtractor,
+    ChineseCLIPFeatureExtractor,
+    SiglipImageProcessor,
+    ConvNextFeatureExtractor,
+    ConvNextImageProcessor,
+    ViTFeatureExtractor,
+    ViTImageProcessor,
+    EfficientNetImageProcessor,
+    MobileViTFeatureExtractor,
+    MobileViTImageProcessor,
+    OwlViTFeatureExtractor,
+    Owlv2ImageProcessor,
+    DeiTFeatureExtractor,
+    BeitFeatureExtractor,
+    DonutFeatureExtractor,
+    NougatImageProcessor,
+    DetrFeatureExtractor,
+    YolosFeatureExtractor,
+    SamImageProcessor,
+    Swin2SRImageProcessor,
+    VitMatteImageProcessor,
+    WhisperFeatureExtractor,
+    Wav2Vec2FeatureExtractor,
+    SeamlessM4TFeatureExtractor,
+    ASTFeatureExtractor,
+    ClapFeatureExtractor,
+    SpeechT5FeatureExtractor,
+    Processor,
+    SamProcessor,
+    WhisperProcessor,
+    Wav2Vec2ProcessorWithLM,
+    SpeechT5Processor,
+    OwlViTProcessor,
+    AutoProcessor,
+};

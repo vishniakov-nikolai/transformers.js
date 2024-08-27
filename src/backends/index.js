@@ -1,7 +1,7 @@
-import * as ONNX from './onnx.js';
-import OpenVINO from './openvino.js';
+const ONNX = require('./onnx.js');
+const OpenVINO = require('./openvino.js');
 
-export default {
+module.exports = {
   ONNX,
   OpenVINO,
 };

@@ -1,10 +1,10 @@
 
 /**
  * @file Custom data structures.
- * 
+ *
  * These are only used internally, meaning an end-user shouldn't
  * need to access anything here.
- * 
+ *
  * @module utils/data-structures
  */
 
@@ -13,12 +13,12 @@
  * Efficient Heap-based Implementation of a Priority Queue.
  * It uses an array-based binary heap, where the root is at index `0`, and the
  * children of node `i` are located at indices `2i + 1` and `2i + 2`, respectively.
- * 
+ *
  * Adapted from the following sources:
  * - https://stackoverflow.com/a/42919752/13989043 (original)
  * - https://github.com/belladoreai/llama-tokenizer-js (minor improvements)
  */
-export class PriorityQueue {
+class PriorityQueue {
 
     /**
      * Create a new PriorityQueue.
@@ -189,7 +189,7 @@ export class PriorityQueue {
 /**
  * A trie structure to efficiently store and search for strings.
  */
-export class CharTrie {
+class CharTrie {
     constructor() {
         this.root = CharTrieNode.default();
     }
@@ -266,7 +266,7 @@ class CharTrieNode {
 /**
  * A lattice data structure to be used for tokenization.
  */
-export class TokenLattice {
+class TokenLattice {
     /**
      * Creates a new TokenLattice instance.
      *
@@ -413,3 +413,9 @@ class TokenLatticeNode {
         return n;
     }
 }
+
+module.exports = {
+    PriorityQueue,
+    CharTrie,
+    TokenLattice,
+};

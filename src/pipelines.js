@@ -13,11 +13,12 @@
  * @module pipelines
  */
 
-import {
+const {
     AutoTokenizer,
     PreTrainedTokenizer,
-} from './tokenizers.js';
-import {
+} = require('./tokenizers.js');
+
+const {
     AutoModel,
     AutoModelForSequenceClassification,
     AutoModelForAudioClassification,
@@ -41,35 +42,37 @@ import {
     AutoModelForDepthEstimation,
     AutoModelForImageFeatureExtraction,
     PreTrainedModel,
-} from './models.js';
-import {
+} = require('./models.js');
+
+const {
     AutoProcessor,
-    Processor
-} from './processors.js';
+    Processor,
+} = require('./processors.js');
 
-
-import {
+const {
     Callable,
     dispatchCallback,
     pop,
     product,
-} from './utils/core.js';
-import {
+} = require('./utils/core.js');
+
+const {
     softmax,
     max,
     getTopItems,
     round,
-} from './utils/maths.js';
-import {
-    read_audio
-} from './utils/audio.js';
-import {
+} = require('./utils/maths.js');
+
+const { read_audio } = require('./utils/audio.js');
+
+const {
     Tensor,
     mean_pooling,
     interpolate,
     quantize_embeddings,
-} from './utils/tensor.js';
-import { RawImage } from './utils/image.js';
+} = require('./utils/tensor.js');
+
+const { RawImage } = require('./utils/image.js');
 
 
 /**
@@ -157,7 +160,7 @@ function get_bounding_box(box, asInteger) {
  * Refer to this class for methods shared across different pipelines.
  * @extends Callable
  */
-export class Pipeline extends Callable {
+class Pipeline extends Callable {
     /**
      * Create a new Pipeline.
      * @param {Object} options An object containing the following properties:
@@ -179,6 +182,7 @@ export class Pipeline extends Callable {
         await this.model.dispose();
     }
 }
+exports.Pipeline = Pipeline;
 
 /**
  * @typedef {Object} ModelTokenizerConstructorArgs
@@ -265,7 +269,7 @@ export class Pipeline extends Callable {
  * // ]
  * ```
  */
-export class TextClassificationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => TextClassificationPipelineType} */ (Pipeline)) {
+class TextClassificationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => TextClassificationPipelineType} */ (Pipeline)) {
 
     /**
      * Create a new TextClassificationPipeline.
@@ -316,6 +320,7 @@ export class TextClassificationPipeline extends (/** @type {new (options: TextPi
         return Array.isArray(texts) || topk === 1 ? /** @type {TextClassificationOutput} */ (toReturn) : /** @type {TextClassificationOutput[]} */ (toReturn)[0];
     }
 }
+exports.TextClassificationPipeline = TextClassificationPipeline;
 
 /**
  * @typedef {Object} TokenClassificationSingle
@@ -367,7 +372,7 @@ export class TextClassificationPipeline extends (/** @type {new (options: TextPi
  * // ]
  * ```
  */
-export class TokenClassificationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => TokenClassificationPipelineType} */ (Pipeline)) {
+class TokenClassificationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => TokenClassificationPipelineType} */ (Pipeline)) {
 
     /**
      * Create a new TokenClassificationPipeline.
@@ -438,6 +443,7 @@ export class TokenClassificationPipeline extends (/** @type {new (options: TextP
         return isBatched ? toReturn : toReturn[0];
     }
 }
+exports.TokenClassificationPipeline = TokenClassificationPipeline;
 
 /**
  * @typedef {Object} QuestionAnsweringOutput
@@ -473,7 +479,7 @@ export class TokenClassificationPipeline extends (/** @type {new (options: TextP
  * // }
  * ```
  */
-export class QuestionAnsweringPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => QuestionAnsweringPipelineType} */ (Pipeline)) {
+class QuestionAnsweringPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => QuestionAnsweringPipelineType} */ (Pipeline)) {
 
     /**
      * Create a new QuestionAnsweringPipeline.
@@ -536,6 +542,7 @@ export class QuestionAnsweringPipeline extends (/** @type {new (options: TextPip
         return (topk === 1) ? toReturn[0] : toReturn;
     }
 }
+exports.QuestionAnsweringPipeline = QuestionAnsweringPipeline;
 
 
 /**
@@ -583,7 +590,7 @@ export class QuestionAnsweringPipeline extends (/** @type {new (options: TextPip
  * // [{ token_str: 'spiral', score: 0.6299987435340881, token: 14061, sequence: 'The Milky Way is a spiral galaxy.' }]
  * ```
  */
-export class FillMaskPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => FillMaskPipelineType} */ (Pipeline)) {
+class FillMaskPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => FillMaskPipelineType} */ (Pipeline)) {
 
     /**
      * Create a new FillMaskPipeline.
@@ -636,6 +643,7 @@ export class FillMaskPipeline extends (/** @type {new (options: TextPipelineCons
         return Array.isArray(texts) ? toReturn : toReturn[0];
     }
 }
+exports.FillMaskPipeline = FillMaskPipeline;
 
 
 /**
@@ -663,7 +671,7 @@ export class FillMaskPipeline extends (/** @type {new (options: TextPipelineCons
  * // [{ generated_text: "To become more healthy, you can: 1. Eat a balanced diet with plenty of fruits, vegetables, whole grains, lean proteins, and healthy fats. 2. Stay hydrated by drinking plenty of water. 3. Get enough sleep and manage stress levels. 4. Avoid smoking and excessive alcohol consumption. 5. Regularly exercise and maintain a healthy weight. 6. Practice good hygiene and sanitation. 7. Seek medical attention if you experience any health issues." }]
  * ```
  */
-export class Text2TextGenerationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => Text2TextGenerationPipelineType} */ (Pipeline)) {
+class Text2TextGenerationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => Text2TextGenerationPipelineType} */ (Pipeline)) {
     /** @type {'generated_text'} */
     _key = 'generated_text';
 
@@ -721,6 +729,7 @@ export class Text2TextGenerationPipeline extends (/** @type {new (options: TextP
         }).map(text => ({ [this._key]: text }));
     }
 }
+exports.Text2TextGenerationPipeline = Text2TextGenerationPipeline;
 
 
 /**
@@ -756,7 +765,7 @@ export class Text2TextGenerationPipeline extends (/** @type {new (options: TextP
  * // [{ summary_text: ' The Eiffel Tower is about the same height as an 81-storey building and the tallest structure in Paris. It is the second tallest free-standing structure in France after the Millau Viaduct.' }]
  * ```
  */
-export class SummarizationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => SummarizationPipelineType} */ (/** @type {any} */ (Text2TextGenerationPipeline))) {
+class SummarizationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => SummarizationPipelineType} */ (/** @type {any} */ (Text2TextGenerationPipeline))) {
     /** @type {'summary_text'} */
     _key = 'summary_text';
 
@@ -768,6 +777,7 @@ export class SummarizationPipeline extends (/** @type {new (options: TextPipelin
         super(options);
     }
 }
+exports.SummarizationPipeline = SummarizationPipeline;
 
 
 /**
@@ -828,7 +838,7 @@ export class SummarizationPipeline extends (/** @type {new (options: TextPipelin
  * // [{ translation_text: 'Le chef des Nations affirme qu 'il n 'y a military solution in Syria.' }]
  * ```
  */
-export class TranslationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => TranslationPipelineType} */ (/** @type {any} */ (Text2TextGenerationPipeline))) {
+class TranslationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => TranslationPipelineType} */ (/** @type {any} */ (Text2TextGenerationPipeline))) {
     /** @type {'translation_text'} */
     _key = 'translation_text';
 
@@ -840,6 +850,7 @@ export class TranslationPipeline extends (/** @type {new (options: TextPipelineC
         super(options);
     }
 }
+exports.TranslationPipeline = TranslationPipeline;
 
 function isChat(x) {
     return Array.isArray(x) && x.every(x => 'role' in x && 'content' in x);
@@ -915,7 +926,7 @@ function isChat(x) {
  * // }]
  * ```
  */
-export class TextGenerationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => TextGenerationPipelineType} */ (Pipeline)) {
+class TextGenerationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => TextGenerationPipelineType} */ (Pipeline)) {
 
     /**
      * Create a new TextGenerationPipeline.
@@ -949,12 +960,21 @@ export class TextGenerationPipeline extends (/** @type {new (options: TextPipeli
             isChatInput = true;
 
             // If the input is a chat, we need to apply the chat template
-            inputs = /** @type {string[]} */(/** @type {Chat[]} */ (texts).map(
-                x => this.tokenizer.apply_chat_template(x, {
+            // inputs = /** @type {string[]} */(/** @type {Chat[]} */ (texts).map(
+            //     x => await this.tokenizer.apply_chat_template(x, {
+            //         tokenize: false,
+            //         add_generation_prompt: true,
+            //     })
+            // ));
+
+            inputs = [];
+            for (const t of texts) {
+                const result = await this.tokenizer.apply_chat_template(t, {
                     tokenize: false,
                     add_generation_prompt: true,
-                })
-            ));
+                });
+                inputs.push(result);
+            }
         }
 
         // By default, do not add special tokens
@@ -1009,6 +1029,7 @@ export class TextGenerationPipeline extends (/** @type {new (options: TextPipeli
         return (!isBatched && toReturn.length === 1) ? toReturn[0] : toReturn;
     }
 }
+exports.TextGenerationPipeline = TextGenerationPipeline;
 
 /**
  * @typedef {Object} ZeroShotClassificationOutput
@@ -1066,7 +1087,7 @@ export class TextGenerationPipeline extends (/** @type {new (options: TextPipeli
  * // }
  * ```
  */
-export class ZeroShotClassificationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => ZeroShotClassificationPipelineType} */ (Pipeline)) {
+class ZeroShotClassificationPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => ZeroShotClassificationPipelineType} */ (Pipeline)) {
     /**
      * Create a new ZeroShotClassificationPipeline.
      * @param {TextPipelineConstructorArgs} options An object used to instantiate the pipeline.
@@ -1160,6 +1181,7 @@ export class ZeroShotClassificationPipeline extends (/** @type {new (options: Te
         return isBatched ? toReturn : toReturn[0];
     }
 }
+exports.ZeroShotClassificationPipeline = ZeroShotClassificationPipeline;
 
 /**
  * @typedef {Object} FeatureExtractionPipelineOptions Parameters specific to feature extraction pipelines.
@@ -1223,7 +1245,7 @@ export class ZeroShotClassificationPipeline extends (/** @type {new (options: Te
  * // }
  * ```
  */
-export class FeatureExtractionPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => FeatureExtractionPipelineType} */ (Pipeline)) {
+class FeatureExtractionPipeline extends (/** @type {new (options: TextPipelineConstructorArgs) => FeatureExtractionPipelineType} */ (Pipeline)) {
     /**
      * Create a new FeatureExtractionPipeline.
      * @param {TextPipelineConstructorArgs} options An object used to instantiate the pipeline.
@@ -1277,6 +1299,7 @@ export class FeatureExtractionPipeline extends (/** @type {new (options: TextPip
         return result;
     }
 }
+exports.FeatureExtractionPipeline = FeatureExtractionPipeline;
 
 
 /**
@@ -1321,7 +1344,7 @@ export class FeatureExtractionPipeline extends (/** @type {new (options: TextPip
  * // }
  * ```
  */
-export class ImageFeatureExtractionPipeline extends (/** @type {new (options: ImagePipelineConstructorArgs) => ImageFeatureExtractionPipelineType} */ (Pipeline)) {
+class ImageFeatureExtractionPipeline extends (/** @type {new (options: ImagePipelineConstructorArgs) => ImageFeatureExtractionPipelineType} */ (Pipeline)) {
     /**
      * Create a new ImageFeatureExtractionPipeline.
      * @param {ImagePipelineConstructorArgs} options An object used to instantiate the pipeline.
@@ -1353,6 +1376,7 @@ export class ImageFeatureExtractionPipeline extends (/** @type {new (options: Im
         return result;
     }
 }
+exports.ImageFeatureExtractionPipeline = ImageFeatureExtractionPipeline;
 
 // TODO
 // export class SentenceSimilarityPipeline extends Pipeline {
@@ -1409,7 +1433,7 @@ export class ImageFeatureExtractionPipeline extends (/** @type {new (options: Im
  * // ]
  * ```
  */
-export class AudioClassificationPipeline extends (/** @type {new (options: AudioPipelineConstructorArgs) => AudioClassificationPipelineType} */ (Pipeline)) {
+class AudioClassificationPipeline extends (/** @type {new (options: AudioPipelineConstructorArgs) => AudioClassificationPipelineType} */ (Pipeline)) {
 
     /**
      * Create a new AudioClassificationPipeline.
@@ -1453,6 +1477,7 @@ export class AudioClassificationPipeline extends (/** @type {new (options: Audio
         return !single || topk === 1 ? /** @type {AudioClassificationOutput} */ (toReturn) : /** @type {AudioClassificationOutput[]} */ (toReturn)[0];
     }
 }
+exports.AudioClassificationPipeline = AudioClassificationPipeline;
 
 /**
  * @typedef {Object} ZeroShotAudioClassificationOutput
@@ -1493,7 +1518,7 @@ export class AudioClassificationPipeline extends (/** @type {new (options: Audio
  * // ]
  * ```
  */
-export class ZeroShotAudioClassificationPipeline extends (/** @type {new (options: TextAudioPipelineConstructorArgs) => ZeroShotAudioClassificationPipelineType} */ (Pipeline)) {
+class ZeroShotAudioClassificationPipeline extends (/** @type {new (options: TextAudioPipelineConstructorArgs) => ZeroShotAudioClassificationPipelineType} */ (Pipeline)) {
 
     /**
      * Create a new ZeroShotAudioClassificationPipeline.
@@ -1545,6 +1570,7 @@ export class ZeroShotAudioClassificationPipeline extends (/** @type {new (option
         return single ? toReturn[0] : toReturn;
     }
 }
+exports.ZeroShotAudioClassificationPipeline = ZeroShotAudioClassificationPipeline;
 
 /**
  * @typedef {{stride: number[], input_features: Tensor, is_last: boolean, tokens?: number[], token_timestamps?: number[]}} ChunkCallbackItem
@@ -1657,7 +1683,7 @@ export class ZeroShotAudioClassificationPipeline extends (/** @type {new (option
  * // { text: " So in college, I was a government major, which means [...] So I'd start off light and I'd bump it up" }
  * ```
  */
-export class AutomaticSpeechRecognitionPipeline extends (/** @type {new (options: TextAudioPipelineConstructorArgs) => AutomaticSpeechRecognitionPipelineType} */ (Pipeline)) {
+class AutomaticSpeechRecognitionPipeline extends (/** @type {new (options: TextAudioPipelineConstructorArgs) => AutomaticSpeechRecognitionPipelineType} */ (Pipeline)) {
 
     /**
      * Create a new AutomaticSpeechRecognitionPipeline.
@@ -1845,6 +1871,7 @@ export class AutomaticSpeechRecognitionPipeline extends (/** @type {new (options
         return single ? toReturn[0] : toReturn;
     }
 }
+exports.AutomaticSpeechRecognitionPipeline = AutomaticSpeechRecognitionPipeline;
 
 /**
  * @typedef {Object} ImageToTextSingle
@@ -1878,7 +1905,7 @@ export class AutomaticSpeechRecognitionPipeline extends (/** @type {new (options
  * // [{ generated_text: 'Mr. Brown commented icily.' }]
  * ```
  */
-export class ImageToTextPipeline extends (/** @type {new (options: TextImagePipelineConstructorArgs) => ImageToTextPipelineType} */ (Pipeline)) {
+class ImageToTextPipeline extends (/** @type {new (options: TextImagePipelineConstructorArgs) => ImageToTextPipelineType} */ (Pipeline)) {
 
     /**
      * Create a new ImageToTextPipeline.
@@ -1909,6 +1936,7 @@ export class ImageToTextPipeline extends (/** @type {new (options: TextImagePipe
         return isBatched ? toReturn : toReturn[0];
     }
 }
+exports.ImageToTextPipeline = ImageToTextPipeline;
 
 /**
  * @typedef {Object} ImageClassificationSingle
@@ -1967,7 +1995,7 @@ export class ImageToTextPipeline extends (/** @type {new (options: TextImagePipe
  * // ]
  * ```
  */
-export class ImageClassificationPipeline extends (/** @type {new (options: ImagePipelineConstructorArgs) => ImageClassificationPipelineType} */ (Pipeline)) {
+class ImageClassificationPipeline extends (/** @type {new (options: ImagePipelineConstructorArgs) => ImageClassificationPipelineType} */ (Pipeline)) {
 
     /**
      * Create a new ImageClassificationPipeline.
@@ -2008,6 +2036,7 @@ export class ImageClassificationPipeline extends (/** @type {new (options: Image
     }
 
 }
+exports.ImageClassificationPipeline = ImageClassificationPipeline;
 
 /**
  * @typedef {Object} ImageSegmentationPipelineOutput
@@ -2047,7 +2076,7 @@ export class ImageClassificationPipeline extends (/** @type {new (options: Image
  * // ]
  * ```
  */
-export class ImageSegmentationPipeline extends (/** @type {new (options: ImagePipelineConstructorArgs) => ImageSegmentationPipelineType} */ (Pipeline)) {
+class ImageSegmentationPipeline extends (/** @type {new (options: ImagePipelineConstructorArgs) => ImageSegmentationPipelineType} */ (Pipeline)) {
     /**
      * Create a new ImageSegmentationPipeline.
      * @param {ImagePipelineConstructorArgs} options An object used to instantiate the pipeline.
@@ -2156,6 +2185,7 @@ export class ImageSegmentationPipeline extends (/** @type {new (options: ImagePi
         return annotation;
     }
 }
+exports.ImageSegmentationPipeline = ImageSegmentationPipeline;
 
 /**
  * @typedef {Object} ZeroShotImageClassificationOutput
@@ -2192,7 +2222,7 @@ export class ImageSegmentationPipeline extends (/** @type {new (options: ImagePi
  * // ]
  * ```
  */
-export class ZeroShotImageClassificationPipeline extends (/** @type {new (options: TextImagePipelineConstructorArgs) => ZeroShotImageClassificationPipelineType} */ (Pipeline)) {
+class ZeroShotImageClassificationPipeline extends (/** @type {new (options: TextImagePipelineConstructorArgs) => ZeroShotImageClassificationPipelineType} */ (Pipeline)) {
     /**
      * Create a new ZeroShotImageClassificationPipeline.
      * @param {TextImagePipelineConstructorArgs} options An object used to instantiate the pipeline.
@@ -2248,6 +2278,7 @@ export class ZeroShotImageClassificationPipeline extends (/** @type {new (option
         return isBatched ? toReturn : toReturn[0];
     }
 }
+exports.ZeroShotImageClassificationPipeline = ZeroShotImageClassificationPipeline;
 
 
 /**
@@ -2291,7 +2322,7 @@ export class ZeroShotImageClassificationPipeline extends (/** @type {new (option
  * // }]
  * ```
  */
-export class ObjectDetectionPipeline extends (/** @type {new (options: ImagePipelineConstructorArgs) => ObjectDetectionPipelineType} */ (Pipeline)) {
+class ObjectDetectionPipeline extends (/** @type {new (options: ImagePipelineConstructorArgs) => ObjectDetectionPipelineType} */ (Pipeline)) {
 
     /**
      * Create a new ObjectDetectionPipeline.
@@ -2338,6 +2369,7 @@ export class ObjectDetectionPipeline extends (/** @type {new (options: ImagePipe
         return isBatched ? result : result[0];
     }
 }
+exports.ObjectDetectionPipeline = ObjectDetectionPipeline;
 
 
 /**
@@ -2426,7 +2458,7 @@ export class ObjectDetectionPipeline extends (/** @type {new (options: ImagePipe
  * // ]
  * ```
  */
-export class ZeroShotObjectDetectionPipeline extends (/** @type {new (options: TextImagePipelineConstructorArgs) => ZeroShotObjectDetectionPipelineType} */ (Pipeline)) {
+class ZeroShotObjectDetectionPipeline extends (/** @type {new (options: TextImagePipelineConstructorArgs) => ZeroShotObjectDetectionPipelineType} */ (Pipeline)) {
 
     /**
      * Create a new ZeroShotObjectDetectionPipeline.
@@ -2483,6 +2515,7 @@ export class ZeroShotObjectDetectionPipeline extends (/** @type {new (options: T
         return isBatched ? toReturn : toReturn[0];
     }
 }
+exports.ZeroShotObjectDetectionPipeline = ZeroShotObjectDetectionPipeline;
 
 /**
  * @typedef {Object} DocumentQuestionAnsweringSingle
@@ -2512,7 +2545,7 @@ export class ZeroShotObjectDetectionPipeline extends (/** @type {new (options: T
  * // [{ answer: 'us-001' }]
  * ```
  */
-export class DocumentQuestionAnsweringPipeline extends (/** @type {new (options: TextImagePipelineConstructorArgs) => DocumentQuestionAnsweringPipelineType} */ (Pipeline)) {
+class DocumentQuestionAnsweringPipeline extends (/** @type {new (options: TextImagePipelineConstructorArgs) => DocumentQuestionAnsweringPipelineType} */ (Pipeline)) {
 
     /**
      * Create a new DocumentQuestionAnsweringPipeline.
@@ -2561,6 +2594,7 @@ export class DocumentQuestionAnsweringPipeline extends (/** @type {new (options:
         return [{ answer }];
     }
 }
+exports.DocumentQuestionAnsweringPipeline = DocumentQuestionAnsweringPipeline;
 
 
 /**
@@ -2620,7 +2654,7 @@ export class DocumentQuestionAnsweringPipeline extends (/** @type {new (options:
  * // }
  * ```
  */
-export class TextToAudioPipeline extends (/** @type {new (options: TextToAudioPipelineConstructorArgs) => TextToAudioPipelineType} */ (Pipeline)) {
+class TextToAudioPipeline extends (/** @type {new (options: TextToAudioPipelineConstructorArgs) => TextToAudioPipelineType} */ (Pipeline)) {
     DEFAULT_VOCODER_ID = "Xenova/speecht5_hifigan"
 
     /**
@@ -2709,6 +2743,7 @@ export class TextToAudioPipeline extends (/** @type {new (options: TextToAudioPi
         }
     }
 }
+exports.TextToAudioPipeline = TextToAudioPipeline;
 
 /**
  * @callback ImageToImagePipelineCallback Transform the image(s) passed as inputs.
@@ -2734,7 +2769,7 @@ export class TextToAudioPipeline extends (/** @type {new (options: TextToAudioPi
  * // }
  * ```
  */
-export class ImageToImagePipeline extends (/** @type {new (options: ImagePipelineConstructorArgs) => ImageToImagePipelineType} */ (Pipeline)) {
+class ImageToImagePipeline extends (/** @type {new (options: ImagePipelineConstructorArgs) => ImageToImagePipelineType} */ (Pipeline)) {
     /**
      * Create a new ImageToImagePipeline.
      * @param {ImagePipelineConstructorArgs} options An object used to instantiate the pipeline.
@@ -2760,6 +2795,7 @@ export class ImageToImagePipeline extends (/** @type {new (options: ImagePipelin
         return toReturn.length > 1 ? toReturn : toReturn[0];
     }
 }
+exports.ImageToImagePipeline = ImageToImagePipeline;
 
 /**
  * @typedef {Object} DepthEstimationPipelineOutput
@@ -2797,7 +2833,7 @@ export class ImageToImagePipeline extends (/** @type {new (options: ImagePipelin
  * // }
  * ```
  */
-export class DepthEstimationPipeline extends (/** @type {new (options: ImagePipelineConstructorArgs) => DepthEstimationPipelineType} */ (Pipeline)) {
+class DepthEstimationPipeline extends (/** @type {new (options: ImagePipelineConstructorArgs) => DepthEstimationPipelineType} */ (Pipeline)) {
     /**
      * Create a new DepthEstimationPipeline.
      * @param {ImagePipelineConstructorArgs} options An object used to instantiate the pipeline.
@@ -2827,6 +2863,7 @@ export class DepthEstimationPipeline extends (/** @type {new (options: ImagePipe
         return toReturn.length > 1 ? toReturn : toReturn[0];
     }
 }
+exports.DepthEstimationPipeline = DepthEstimationPipeline;
 
 const SUPPORTED_TASKS = Object.freeze({
     "text-classification": {
@@ -3168,7 +3205,7 @@ const TASK_ALIASES = Object.freeze({
  * @returns {Promise<AllTasks[T]>} A Pipeline object for the specified task.
  * @throws {Error} If an unsupported pipeline is requested.
  */
-export async function pipeline(
+async function pipeline(
     task,
     model = null,
     {
@@ -3232,6 +3269,7 @@ export async function pipeline(
     const pipelineClass = pipelineInfo.pipeline;
     return new pipelineClass(results);
 }
+exports.pipeline = pipeline;
 
 
 /**

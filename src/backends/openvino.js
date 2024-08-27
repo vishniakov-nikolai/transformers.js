@@ -1,12 +1,12 @@
-import { hrtime } from 'process';
-import * as OpenVINONode from 'openvino-node';
+const { hrtime } = require('process');
+const OpenVINONode = require('openvino-node');
 
-import { Tensor } from '../utils/tensor.js';
-import { getModelFile } from '../utils/hub.js';
+const { Tensor } = require('../utils/tensor.js');
+const { getModelFile } = require('../utils/hub.js');
 
 const { addon: ov } = OpenVINONode;
 
-export default { create: getWrappedOVModelByPath };
+module.exports = { create: getWrappedOVModelByPath };
 
 async function getWrappedOVModelByPath(modelDir, filename, options) {
   const device = options.device || 'AUTO';
@@ -71,6 +71,8 @@ async function getWrappedOVModelByPath(modelDir, filename, options) {
               return ov.element.i64;
           case 'float32':
               return ov.element.f32;
+          case 'bool':
+              return ov.element.u8;
           default:
               throw new Error(`Undefined precision: ${str}`);
       }

@@ -1,19 +1,18 @@
 /**
  * @file Helper module for `Tensor` processing.
- * 
- * These functions and classes are only used internally, 
+ *
+ * These functions and classes are only used internally,
  * meaning an end-user shouldn't need to access anything here.
- * 
+ *
  * @module utils/tensor
  */
 
-import { ONNX } from '../backends/onnx.js';
+const { ONNX } = require('../backends/onnx.js');
 
-import {
+const {
     interpolate_data,
     permute_data
-} from './maths.js';
-
+} = require('./maths.js');
 
 const DataTypeMap = Object.freeze({
     float32: Float32Array,
@@ -37,7 +36,7 @@ const DataTypeMap = Object.freeze({
 
 const ONNXTensor = ONNX.Tensor;
 
-export class Tensor {
+class Tensor {
     /** @type {number[]} Dimensions of the tensor. */
     dims;
 
@@ -141,9 +140,9 @@ export class Tensor {
     }
 
     /**
-     * @param {number} index 
-     * @param {number} iterSize 
-     * @param {any} iterDims 
+     * @param {number} index
+     * @param {number} iterSize
+     * @param {any} iterDims
      * @returns {Tensor}
      */
     _subarray(index, iterSize, iterDims) {
@@ -326,7 +325,7 @@ export class Tensor {
 
     /**
      * Returns the sum of each row of the input tensor in the given dimension dim.
-     * 
+     *
      * @param {number} [dim=null] The dimension or dimensions to reduce. If `null`, all dimensions are reduced.
      * @param {boolean} keepdim Whether the output tensor has `dim` retained or not.
      * @returns The summed tensor
@@ -455,10 +454,10 @@ export class Tensor {
 
     /**
      * Returns a tensor with all specified dimensions of input of size 1 removed.
-     * 
+     *
      * NOTE: The returned tensor shares the storage with the input tensor, so changing the contents of one will change the contents of the other.
      * If you would like a copy, use `tensor.clone()` before squeezing.
-     * 
+     *
      * @param {number} [dim=null] If given, the input will be squeezed only in the specified dimensions.
      * @returns The squeezed tensor
      */
@@ -480,9 +479,9 @@ export class Tensor {
 
     /**
      * Returns a new tensor with a dimension of size one inserted at the specified position.
-     * 
+     *
      * NOTE: The returned tensor shares the same underlying data with this tensor.
-     * 
+     *
      * @param {number} dim The index at which to insert the singleton dimension
      * @returns The unsqueezed tensor
      */
@@ -625,7 +624,7 @@ export class Tensor {
 
 /**
  * This creates a nested array of a given type and depth (see examples).
- * 
+ *
  * @example
  *   NestArray<string, 1>; // string[]
  * @example
@@ -687,7 +686,7 @@ function reshape(data, dimensions) {
  * @param {Array} axes The axes to permute the tensor along.
  * @returns {Tensor} The permuted tensor.
  */
-export function permute(tensor, axes) {
+function permute(tensor, axes) {
     const [permutedData, shape] = permute_data(tensor.data, tensor.dims, axes);
     return new Tensor(tensor.type, permutedData, shape);
 }
@@ -701,7 +700,7 @@ export function permute(tensor, axes) {
  * @param {boolean} align_corners Whether to align corners.
  * @returns {Tensor} The interpolated tensor.
  */
-export function interpolate(input, [out_height, out_width], mode = 'bilinear', align_corners = false) {
+function interpolate(input, [out_height, out_width], mode = 'bilinear', align_corners = false) {
 
     // Input image dimensions
     const in_channels = input.dims.at(-3) ?? 1;
@@ -724,7 +723,7 @@ export function interpolate(input, [out_height, out_width], mode = 'bilinear', a
  * @param {Tensor} attention_mask Tensor of shape [batchSize, seqLength]
  * @returns {Tensor} Returns a new Tensor of shape [batchSize, embedDim].
  */
-export function mean_pooling(last_hidden_state, attention_mask) {
+function mean_pooling(last_hidden_state, attention_mask) {
     // last_hidden_state: [batchSize, seqLength, embedDim]
     // attention_mask:    [batchSize, seqLength]
 
@@ -772,7 +771,7 @@ export function mean_pooling(last_hidden_state, attention_mask) {
  * @param {number} [options.eps=1e-5] A value added to the denominator for numerical stability.
  * @returns {Tensor} The normalized tensor.
  */
-export function layer_norm(input, normalized_shape, {
+function layer_norm(input, normalized_shape, {
     eps = 1e-5,
 } = {}) {
     if (input.dims.length !== 2) {
@@ -846,7 +845,7 @@ function calc_unsqueeze_dims(dims, dim) {
  * @param {number} size The size of the array.
  * @param {number} [dimension=null] The dimension that the index is for (optional).
  * @returns {number} The index, guaranteed to be non-negative and less than `arrayLength`.
- * 
+ *
  * @throws {Error} If the index is out of range.
  * @private
  */
@@ -868,7 +867,7 @@ function safeIndex(index, size, dimension = null) {
  * @param {number} dim The dimension to concatenate along.
  * @returns {Tensor} The concatenated tensor.
  */
-export function cat(tensors, dim = 0) {
+function cat(tensors, dim = 0) {
     dim = safeIndex(dim, tensors[0].dims.length);
 
     // TODO do validation of shapes
@@ -931,7 +930,7 @@ export function cat(tensors, dim = 0) {
  * @param {number} dim The dimension to stack along.
  * @returns {Tensor} The stacked tensor.
  */
-export function stack(tensors, dim = 0) {
+function stack(tensors, dim = 0) {
     // TODO do validation of shapes
     // NOTE: stack expects each tensor to be equal size
     return cat(tensors.map(t => t.unsqueeze(dim)), dim);
@@ -946,7 +945,7 @@ export function stack(tensors, dim = 0) {
  * @param {boolean} keepdim whether the output tensor has dim retained or not.
  * @returns {Tensor[]} A tuple of (std, mean) tensors.
  */
-export function std_mean(input, dim = null, correction = 1, keepdim = false) {
+function std_mean(input, dim = null, correction = 1, keepdim = false) {
 
     if (dim === null) {
         // None to reduce over all dimensions.
@@ -1016,7 +1015,7 @@ export function std_mean(input, dim = null, correction = 1, keepdim = false) {
  * @param {boolean} keepdim whether the output tensor has dim retained or not.
  * @returns A new tensor with means taken along the specified dimension.
  */
-export function mean(input, dim = null, keepdim = false) {
+function mean(input, dim = null, keepdim = false) {
 
     if (dim === null) {
         // None to reduce over all dimensions.
@@ -1074,10 +1073,10 @@ export function mean(input, dim = null, keepdim = false) {
  *
  * Measures similarity between two temporal sequences (e.g., input audio and output tokens
  * to generate token-level timestamps).
- * @param {Tensor} matrix 
+ * @param {Tensor} matrix
  * @returns {number[][]}
  */
-export function dynamicTimeWarping(matrix) {
+function dynamicTimeWarping(matrix) {
     const [output_length, input_length] = matrix.dims;
 
     const outputShape = [output_length + 1, input_length + 1];
@@ -1176,7 +1175,7 @@ function dimsToStride(dims) {
  * Returns a tensor filled with the scalar value 1, with the shape defined by the variable argument size.
  * @param {number[]} size A sequence of integers defining the shape of the output tensor.
  */
-export function ones(size) {
+function ones(size) {
     const numElements = size.reduce((a, b) => a * b, 1);
     return new Tensor(
         'int64',
@@ -1190,7 +1189,7 @@ export function ones(size) {
  * @param {Tensor} tensor The size of input will determine size of the output tensor.
  * @returns The ones tensor.
  */
-export function ones_like(tensor) {
+function ones_like(tensor) {
     return ones(tensor.dims);
 }
 
@@ -1200,7 +1199,7 @@ export function ones_like(tensor) {
  * @param {'binary'|'ubinary'} precision The precision to use for quantization.
  * @returns {Tensor} The quantized tensor.
  */
-export function quantize_embeddings(tensor, precision) {
+function quantize_embeddings(tensor, precision) {
     if (tensor.dims.length !== 2) {
         throw new Error("The tensor must have 2 dimensions");
     }
@@ -1237,3 +1236,19 @@ export function quantize_embeddings(tensor, precision) {
 
     return new Tensor(dtype, outputData, [tensor.dims[0], tensor.dims[1] / 8]);
 }
+
+module.exports = {
+    Tensor,
+    permute,
+    interpolate,
+    mean_pooling,
+    layer_norm,
+    cat,
+    stack,
+    std_mean,
+    mean,
+    dynamicTimeWarping,
+    ones,
+    ones_like,
+    quantize_embeddings,
+};

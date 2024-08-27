@@ -1,19 +1,32 @@
 /**
- * @file Helper module for audio processing. 
- * 
- * These functions and classes are only used internally, 
+ * @file Helper module for audio processing.
+ *
+ * These functions and classes are only used internally,
  * meaning an end-user shouldn't need to access anything here.
- * 
+ *
  * @module utils/audio
  */
 
-import {
+const {
     getFile,
-} from './hub.js';
-import { FFT, max } from './maths.js';
-import {
+} = require('./hub.js');
+
+const {
+    FFT,
+    max,
+} = require('./maths.js');
+
+const {
     calculateReflectOffset,
-} from './core.js';
+} = require('./core.js');
+
+module.exports = {
+    read_audio,
+    hanning,
+    mel_filter_bank,
+    spectrogram,
+    window_function,
+};
 
 
 /**
@@ -22,7 +35,7 @@ import {
  * @param {number} sampling_rate The sampling rate to use when decoding the audio.
  * @returns {Promise<Float32Array>} The decoded audio as a `Float32Array`.
  */
-export async function read_audio(url, sampling_rate) {
+async function read_audio(url, sampling_rate) {
     if (typeof AudioContext === 'undefined') {
         // Running in node or an environment without AudioContext
         throw Error(
@@ -83,7 +96,7 @@ export async function read_audio(url, sampling_rate) {
  * @param {number} M The length of the Hanning window to generate.
  * @returns {Float64Array} The generated Hanning window.
  */
-export function hanning(M) {
+function hanning(M) {
     if (M < 1) {
         return new Float64Array();
     }
@@ -110,8 +123,8 @@ const HERTZ_TO_MEL_MAPPING = {
 }
 
 /**
- * @template {Float32Array|Float64Array|number} T 
- * @param {T} freq 
+ * @template {Float32Array|Float64Array|number} T
+ * @param {T} freq
  * @param {string} [mel_scale]
  * @returns {T}
  */
@@ -133,8 +146,8 @@ const MEL_TO_HERTZ_MAPPING = {
 }
 
 /**
- * @template {Float32Array|Float64Array|number} T 
- * @param {T} mels 
+ * @template {Float32Array|Float64Array|number} T
+ * @param {T} mels
  * @param {string} [mel_scale]
  * @returns {T}
  */
@@ -216,7 +229,7 @@ function linspace(start, end, num) {
  * @returns {number[][]} Triangular filter bank matrix, which is a 2D array of shape (`num_frequency_bins`, `num_mel_filters`).
  * This is a projection matrix to go from a spectrogram to a mel spectrogram.
  */
-export function mel_filter_bank(
+function mel_filter_bank(
     num_frequency_bins,
     num_mel_filters,
     min_frequency,
@@ -296,11 +309,11 @@ function padReflect(array, left, right) {
 /**
  * Helper function to compute `amplitude_to_db` and `power_to_db`.
  * @template {Float32Array|Float64Array} T
- * @param {T} spectrogram 
- * @param {number} factor 
- * @param {number} reference 
- * @param {number} min_value 
- * @param {number} db_range 
+ * @param {T} spectrogram
+ * @param {number} factor
+ * @param {number} reference
+ * @param {number} min_value
+ * @param {number} db_range
  * @returns {T}
  */
 function _db_conversion_helper(spectrogram, factor, reference, min_value, db_range) {
@@ -335,12 +348,12 @@ function _db_conversion_helper(spectrogram, factor, reference, min_value, db_ran
 /**
  * Converts an amplitude spectrogram to the decibel scale. This computes `20 * log10(spectrogram / reference)`,
  * using basic logarithm properties for numerical stability. NOTE: Operates in-place.
- * 
+ *
  * The motivation behind applying the log function on the (mel) spectrogram is that humans do not hear loudness on a
  * linear scale. Generally to double the perceived volume of a sound we need to put 8 times as much energy into it.
  * This means that large variations in energy may not sound all that different if the sound is loud to begin with.
  * This compression operation makes the (mel) spectrogram features match more closely what humans actually hear.
- * 
+ *
  * @template {Float32Array|Float64Array} T
  * @param {T} spectrogram The input amplitude (mel) spectrogram.
  * @param {number} [reference=1.0] Sets the input spectrogram value that corresponds to 0 dB.
@@ -358,14 +371,14 @@ function amplitude_to_db(spectrogram, reference = 1.0, min_value = 1e-5, db_rang
 /**
  * Converts a power spectrogram to the decibel scale. This computes `10 * log10(spectrogram / reference)`,
  * using basic logarithm properties for numerical stability. NOTE: Operates in-place.
- * 
+ *
  * The motivation behind applying the log function on the (mel) spectrogram is that humans do not hear loudness on a
  * linear scale. Generally to double the perceived volume of a sound we need to put 8 times as much energy into it.
  * This means that large variations in energy may not sound all that different if the sound is loud to begin with.
  * This compression operation makes the (mel) spectrogram features match more closely what humans actually hear.
- * 
+ *
  * Based on the implementation of `librosa.power_to_db`.
- * 
+ *
  * @template {Float32Array|Float64Array} T
  * @param {T} spectrogram The input power (mel) spectrogram. Note that a power spectrogram has the amplitudes squared!
  * @param {number} [reference=1.0] Sets the input spectrogram value that corresponds to 0 dB.
@@ -382,7 +395,7 @@ function power_to_db(spectrogram, reference = 1.0, min_value = 1e-10, db_range =
 
 /**
  * Calculates a spectrogram over one waveform using the Short-Time Fourier Transform.
- * 
+ *
  * This function can create the following kinds of spectrograms:
  *   - amplitude spectrogram (`power = 1.0`)
  *   - power spectrogram (`power = 2.0`)
@@ -392,9 +405,9 @@ function power_to_db(spectrogram, reference = 1.0, min_value = 1e-10, db_range =
  *   - log-mel spectrogram (provide `mel_filters` and `log_mel`)
  *
  * In this implementation, the window is assumed to be zero-padded to have the same size as the analysis frame.
- * A padded window can be obtained from `window_function()`. The FFT input buffer may be larger than the analysis frame, 
+ * A padded window can be obtained from `window_function()`. The FFT input buffer may be larger than the analysis frame,
  * typically the next power of two.
- * 
+ *
  * @param {Float32Array|Float64Array} waveform The input waveform of shape `(length,)`. This must be a single real-valued, mono waveform.
  * @param {Float32Array|Float64Array} window The windowing function to apply of shape `(frame_length,)`, including zero-padding if necessary. The actual window length may be
  * shorter than `frame_length`, but we're assuming the array has already been zero-padded.
@@ -431,7 +444,7 @@ function power_to_db(spectrogram, reference = 1.0, min_value = 1e-10, db_range =
  * @param {boolean} [options.transpose=false] If `true`, the returned spectrogram will have shape `(num_frames, num_frequency_bins/num_mel_filters)`. If `false`, the returned spectrogram will have shape `(num_frequency_bins/num_mel_filters, num_frames)`.
  * @returns {{data: Float32Array, dims: number[]}} Spectrogram of shape `(num_frequency_bins, length)` (regular spectrogram) or shape `(num_mel_filters, length)` (mel spectrogram).
  */
-export function spectrogram(
+function spectrogram(
     waveform,
     window,
     frame_length,
@@ -637,7 +650,7 @@ export function spectrogram(
  * @param {boolean} [options.center=true] Whether to center the window inside the FFT buffer. Only used when `frame_length` is provided.
  * @returns {Float64Array} The window of shape `(window_length,)` or `(frame_length,)`.
  */
-export function window_function(window_length, name, {
+function window_function(window_length, name, {
     periodic = true,
     frame_length = null,
     center = true,

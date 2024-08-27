@@ -16,44 +16,45 @@
  * @module backends/onnx
  */
 
-import {
+const {
     getModelFile,
-} from '../utils/hub.js';
+} = require('../utils/hub.js');
 
 // NOTE: Import order matters here. We need to import `onnxruntime-node` before `onnxruntime-web`.
 // In either case, we select the default export if it exists, otherwise we use the named export.
-import * as ONNX_NODE from 'onnxruntime-node';
-import * as ONNX_WEB from 'onnxruntime-web';
+const ONNX_NODE = require('onnxruntime-node');
 
 /** @type {import('onnxruntime-web')} The ONNX runtime module. */
-export let ONNX;
+let ONNX;
 
-export const executionProviders = [
+const executionProviders = [
     // 'webgpu',
     'wasm'
 ];
 
 if (typeof process !== 'undefined' && process?.release?.name === 'node') {
     // Running in a node-like environment.
-    ONNX = ONNX_NODE.default ?? ONNX_NODE;
+    // ONNX = ONNX_NODE.default ?? ONNX_NODE;
+    ONNX = ONNX_NODE;
 
     // Add `cpu` execution provider, with higher precedence that `wasm`.
     executionProviders.unshift('cpu');
 
-} else {
-    // Running in a browser-environment
-    ONNX = ONNX_WEB.default ?? ONNX_WEB;
-
-    // SIMD for WebAssembly does not operate correctly in some recent versions of iOS (16.4.x).
-    // As a temporary fix, we disable it for now.
-    // For more information, see: https://github.com/microsoft/onnxruntime/issues/15644
-    const isIOS = typeof navigator !== 'undefined' && /iP(hone|od|ad).+16_4.+AppleWebKit/.test(navigator.userAgent);
-    if (isIOS) {
-        ONNX.env.wasm.simd = false;
-    }
 }
+// else {
+//     // Running in a browser-environment
+//     ONNX = ONNX_WEB.default ?? ONNX_WEB;
 
-export async function create(pretrained_model_name_or_path, fileName, options) {
+//     // SIMD for WebAssembly does not operate correctly in some recent versions of iOS (16.4.x).
+//     // As a temporary fix, we disable it for now.
+//     // For more information, see: https://github.com/microsoft/onnxruntime/issues/15644
+//     const isIOS = typeof navigator !== 'undefined' && /iP(hone|od|ad).+16_4.+AppleWebKit/.test(navigator.userAgent);
+//     if (isIOS) {
+//         ONNX.env.wasm.simd = false;
+//     }
+// }
+
+async function create(pretrained_model_name_or_path, fileName, options) {
     let modelFileName = `onnx/${fileName}${options.quantized ? '_quantized' : ''}.onnx`;
     let buffer = await getModelFile(pretrained_model_name_or_path, modelFileName, true, options);
 
@@ -77,3 +78,9 @@ export async function create(pretrained_model_name_or_path, fileName, options) {
         });
     }
 }
+
+module.exports = {
+    create,
+    executionProviders,
+    ONNX,
+};

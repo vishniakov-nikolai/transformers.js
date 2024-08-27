@@ -5,13 +5,13 @@
  * @module utils/hub
  */
 
-import fs from 'fs';
-import path from 'path';
-import fetch from 'node-fetch';
-import { HttpsProxyAgent } from 'https-proxy-agent';
+const fs = require('fs');
+const path = require('path');
+const fetch = require('node-fetch');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
-import { env } from '../env.js';
-import { dispatchCallback } from './core.js';
+const { env } = require('../env.js');
+const { dispatchCallback } = require('./core.js');
 
 /**
  * @typedef {Object} PretrainedOptions Options for loading a pretrained model.
@@ -177,7 +177,7 @@ function isValidUrl(string, protocols = null, validHosts = null) {
  * @param {URL|string} urlOrPath The URL/path of the file to get.
  * @returns {Promise<FileResponse|Response>} A promise that resolves to a FileResponse object (if the file is retrieved using the FileSystem API), or a Response object (if the file is retrieved using the Fetch API).
  */
-export async function getFile(urlOrPath) {
+async function getFile(urlOrPath) {
     const proxyUrl = process.env.http_proxy || process.env.HTTP_PROXY || process.env.npm_config_proxy;
     let agent;
 
@@ -337,8 +337,7 @@ async function tryCache(cache, ...names) {
  * @throws Will throw an error if the file is not found and `fatal` is true.
  * @returns {Promise} A Promise that resolves with the file content as a buffer.
  */
-export async function getModelFile(path_or_repo_id, filename, fatal = true, options = {}) {
-
+async function getModelFile(path_or_repo_id, filename, fatal = true, options = {}) {
     if (!env.allowLocalModels) {
         // User has disabled local models, so we just make sure other settings are correct.
 
@@ -589,7 +588,7 @@ export async function getModelFile(path_or_repo_id, filename, fatal = true, opti
  * @returns {Promise<Object>} The JSON data parsed into a JavaScript object.
  * @throws Will throw an error if the file is not found and `fatal` is true.
  */
-export async function getModelJSON(modelPath, fileName, fatal = true, options = {}) {
+async function getModelJSON(modelPath, fileName, fatal = true, options = {}) {
     let buffer = await getModelFile(modelPath, fileName, fatal, options);
     if (buffer === null) {
         // Return empty object
@@ -628,7 +627,6 @@ async function readResponse(response, progress_callback) {
 
     if (typeof response.body.on !== 'function') {
         const reader = response.body.getReader();
-        console.log('here');
 
         async function read() {
             const { done, value } = await reader.read();
@@ -720,3 +718,9 @@ function pathJoin(...parts) {
     })
     return parts.join('/');
 }
+
+module.exports = {
+    getFile,
+    getModelFile,
+    getModelJSON,
+};
