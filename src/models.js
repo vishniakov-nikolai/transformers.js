@@ -76,7 +76,7 @@ const {
 } = require('./utils/tensor.js');
 
 const backends = require('./backends/index.js');
-const { medianFilter } = require('./transformers.js');
+const { medianFilter } = require('./utils/maths.js');
 const { InferenceSession, Tensor: ONNXTensor, env } = backends.ONNX.ONNX;
 
 /** @typedef {import('onnxruntime-web').InferenceSession} InferenceSession */
