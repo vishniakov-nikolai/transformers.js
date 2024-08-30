@@ -6,6 +6,8 @@ const { getModelFile } = require('../utils/hub.js');
 
 const { addon: ov } = OpenVINONode;
 
+let GLOBAL_CORE = null;
+
 module.exports = { create: getWrappedOVModelByPath };
 
 async function getWrappedOVModelByPath(modelDir, filename, options) {
@@ -19,12 +21,15 @@ async function getWrappedOVModelByPath(modelDir, filename, options) {
       modelFiles.push(file);
   }
 
-  const core = new ov.Core();
+  if (!GLOBAL_CORE) {
+    console.log('== Create new Core instance');
+    GLOBAL_CORE = new ov.Core();
+  }
   const model = modelFiles.length === 2
-    ? await core.readModel(modelFiles[0], modelFiles[1])
-    : await core.readModel(modelFiles[0]);
+    ? await GLOBAL_CORE.readModel(modelFiles[0], modelFiles[1])
+    : await GLOBAL_CORE.readModel(modelFiles[0]);
   const inputNames = model.inputs.map(i => i.toString());
-  const compiledModel = await core.compileModel(model, device);
+  const compiledModel = await GLOBAL_CORE.compileModel(model, device);
   const ir = compiledModel.createInferRequest();
   console.log('== Use device ', device);
 
