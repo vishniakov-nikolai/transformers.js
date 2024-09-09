@@ -109,8 +109,8 @@ function sortFilenames(files) {
     const isBIN = new RegExp(/^.+\.(bin)$/i);
 
     // Order is important
-    const xml = files.find(isXML.test);
-    const bin = files.find(isBIN.test);
+    const xml = files.find(f => isXML.test(f));
+    const bin = files.find(f => isBIN.test(f));
 
     return [xml, bin];
 }
