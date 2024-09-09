@@ -25,9 +25,8 @@ async function getWrappedOVModelByPath(modelDir, filename, options) {
     console.log('== Create new Core instance');
     GLOBAL_CORE = new ov.Core();
   }
-  const model = modelFiles.length === 2
-    ? await GLOBAL_CORE.readModel(modelFiles[0], modelFiles[1])
-    : await GLOBAL_CORE.readModel(modelFiles[0]);
+
+  const model = await getModel(modelFiles);
   const inputNames = model.inputs.map(i => i.toString());
   const compiledModel = await GLOBAL_CORE.compileModel(model, device);
   const ir = compiledModel.createInferRequest();
@@ -93,4 +92,24 @@ async function getWrappedOVModelByPath(modelDir, filename, options) {
               throw new Error(`Undefined precision: ${elementType}`);
       }
   }
+}
+
+function getModel(files) {
+    const count = files.length;
+    const isXMLorBIN = new RegExp(/^.+\.(xml|bin)$/i);
+    const isXML = new RegExp(/^.+\.(xml)$/i);
+    const isBIN = new RegExp(/^.+\.(bin)$/i);
+    const isIRModel = count === 2
+        && files.filter(name => isXMLorBIN.test(name)).length === 2;
+
+    if (!isIRModel)
+        return count === 2
+            ? GLOBAL_CORE.readModel(files[0], files[1])
+            : GLOBAL_CORE.readModel(files[0]);
+
+    // Order is important
+    const xml = files.find(isXML.test);
+    const bin = files.find(isBIN.test);
+
+    return GLOBAL_CORE.readModel(xml, bin);
 }
